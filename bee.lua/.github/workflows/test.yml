@@ -1,0 +1,138 @@
+name: test
+on: [ push, pull_request ]
+jobs:
+  windows-x86:
+    name: windows (x86)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actboy168/setup-luamake@master
+    - run: luamake -arch x86 -notest -sanitize
+    - run: luamake test -v
+  windows-x86_64:
+    name: windows (x86_64)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actboy168/setup-luamake@master
+    - run: luamake -arch x86_64 -notest -sanitize
+    - run: luamake test -v
+  windows-clang:
+    name: windows (clang)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actboy168/setup-luamake@master
+    - run: luamake -cc clang-cl -notest
+    - run: luamake test -v
+  windows-mingw:
+    name: windows (mingw)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+        path: luamake
+        repository: actboy168/luamake
+        submodules : recursive
+    - uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-ninja
+    - shell: msys2 {0}
+      working-directory: luamake
+      run: ./compile/build.sh notest
+    - shell: msys2 {0}
+      run: |
+        ./luamake/luamake -notest
+        ./luamake/luamake test -v
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [13, 14]
+    runs-on: macos-${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actboy168/setup-luamake@master
+    - run: luamake -arch x86_64 -notest -sanitize
+    - run: luamake test -v
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [22.04, 22.04-arm]
+    runs-on: ubuntu-${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actboy168/setup-luamake@master
+    - run: luamake -notest -sanitize
+    - run: luamake lua test/glibc-version.lua
+    - run: luamake test -v
+  linux-qemu:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [armv7, riscv64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          path: luamake
+          repository: actboy168/luamake
+          submodules : recursive
+      - uses: uraimo/run-on-arch-action@v3
+        continue-on-error: true
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ubuntu22.04
+          dockerRunArgs: |
+            --volume "${PWD}:/actboy168"
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y gcc g++ ninja-build
+            apt-get install -q -y binutils-dev libunwind-dev
+          run: |
+            pushd luamake
+            ./compile/build.sh notest
+            popd
+            ./luamake/luamake -notest
+            ./luamake/luamake lua test/glibc-version.lua
+            ./luamake/luamake test -v
+  bsd:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: freebsd
+            version: '14.2'
+            install: pkg install -y ninja libinotify
+          - os: openbsd
+            version: '7.6'
+            install: pkg_add ninja libinotify
+          - os: netbsd
+            version: '10.1'
+            install: pkgin -y install ninja-build libinotify
+    name: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          path: luamake
+          repository: actboy168/luamake
+          submodules : recursive
+      - uses: cross-platform-actions/action@v0.27.0
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+          run: |
+            sudo ${{ matrix.install }}
+            cd luamake
+            ./compile/build.sh notest
+            cd ..
+            ./luamake/luamake -noetst
+            ./luamake/luamake test -v

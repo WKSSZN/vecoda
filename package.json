@@ -1,0 +1,80 @@
+{
+  	"name": "vecoda",
+	"displayName": "vecoda",
+	"description": "use decoda in vscode",
+	"version": "1.0.2",
+	"author": {
+		"name": "wzn"
+	},
+	"publisher": "wzn",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"categories": [
+		"Debuggers"
+	],
+	"keywords": [
+		"lua",
+		"debuggers"
+	],
+	"activationEvents": [
+        "onDebugInitialConfigurations",
+		"onDebugDynamicConfigurations",
+		"onDebugResolve:lua"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"breakpoints": [
+			{
+				"language": "lua"
+			}
+		],
+		"debuggers": [
+			{
+				"type": "lua",
+				"label": "Lua Debug",
+				"languages": ["lua"],
+				"configurationAttributes": {
+					"launch": {
+						"properties": {
+							"arg": {
+								"default": "",
+								"type": "string",
+								"markdownDescription": "命令行参数"
+							},
+							"cwd": {
+								"default": "${workspaceFolder}",
+								"type" : "string",
+								"markdownDescription": "工作目录"
+							},
+							"runtimeExecutable": {
+								"type": "string",
+								"markdownDescription": "可执行程序目录"
+							}
+						}
+					}
+				},
+				"configurationSnippets": [
+					{
+						"body": {
+							"arg": "",
+							"cwd": "${workspaceFolder}",
+							"runtimeExecutable":"lua.exe",
+							"type": "lua"
+						},
+						"label": "Lua Debug: Launch",
+						"description": "A new configuration for launching a lua debug program"
+					}
+				]
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "yarn run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "yarn run compile && yarn run lint",
+		"lint": "eslint src --ext ts",
+		"test": "node ./out/test/runTest.js"
+	}
+}

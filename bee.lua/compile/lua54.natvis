@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="lua_State">
+    <DisplayString>[stack top={top.p-(ci-&gt;func.p+1), d}]</DisplayString>
+    <Expand>
+      <Item Name="[stack top]">top.p-(ci-&gt;func.p+1)</Item>
+      <Item Name="[call]" Condition="ci->func.p->val.tt_!=0">ci-&gt;func.p</Item>
+      <Synthetic Name="[callinfo]">
+        <DisplayString>------------------------------------</DisplayString>
+      </Synthetic>
+      <LinkedListItems>
+        <HeadPointer>ci</HeadPointer>
+        <NextPointer>previous</NextPointer>
+        <ValueNode>this</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+  <Type Name="CallInfo">
+    <!-- light C function -->
+    <DisplayString Condition="(func.p->val.tt_) == 0x16">{func.p-&gt;val.value_.f, na}</DisplayString>
+    <!-- Lua closure -->
+    <DisplayString Condition="(func.p->val.tt_) == 0x46">{((Closure *)(func.p-&gt;val.value_.gc))-&gt;l, na}</DisplayString>
+    <!-- C closure -->
+    <DisplayString Condition="(func.p->val.tt_) == 0x66">{((Closure *)(func.p-&gt;val.value_.gc))-&gt;c, na}</DisplayString>
+    <!-- EOF -->
+    <DisplayString Condition="(func.p->val.tt_) == 0x00">&lt;---Stack Bottom---&gt;</DisplayString>
+    <Expand>
+      <ExpandedItem>func</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="StackValue">
+    <DisplayString>{val}</DisplayString>
+    <Expand>
+      <ExpandedItem>val</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="TValue">
+    <DisplayString Condition="tt_ == 0x16">{value_.f, na}</DisplayString>
+    <DisplayString Condition="tt_ == 0x46">{((Closure *)(value_.gc))-&gt;l, na}</DisplayString>
+    <DisplayString Condition="tt_ == 0x66">{((Closure *)(value_.gc))-&gt;c, na}</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="tt_ == 0x16">value_.f</ExpandedItem>
+      <ExpandedItem Condition="tt_ == 0x46">((Closure *)(value_.gc))-&gt;l</ExpandedItem>
+      <ExpandedItem Condition="tt_ == 0x66">((Closure *)(value_.gc))-&gt;c</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="CClosure">
+    <DisplayString>{f, na}</DisplayString>
+  </Type>
+  <Type Name="LClosure">
+    <DisplayString>{p, na}</DisplayString>
+    <Expand>
+      <ExpandedItem>p</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="Proto">
+    <DisplayString Condition="source">{source}:{linedefined}</DisplayString>
+    <DisplayString>=?</DisplayString>
+    <Expand>
+      <Item Name="source" Condition="source">(source)</Item>
+      <Item Name="linedefined">linedefined</Item>
+      <Item Name="lastlinedefined">lastlinedefined</Item>
+      <Item Name="what" Condition="linedefined == 0">"main"</Item>
+      <Item Name="what" Condition="linedefined != 0">"Lua"</Item>
+    </Expand>
+  </Type>
+  <Type Name="TString">
+    <DisplayString>{(char *)(this)+8+sizeof(double)*2, sb}</DisplayString>
+  </Type>
+</AutoVisualizer>

@@ -1,0 +1,74 @@
+# vecoda README
+
+把decode适配到vscode
+
+## Features
+
+Launch
+断点
+stepin
+stepover
+stepout
+异常捕捉
+变量查看
+
+## Requirements
+
+只支持windows系统中的32位程序（跟decoda一样）
+
+## 如何使用
+项目目录里没有.vscode/launch.json的话就按Ctrl+Shift+D打开debug pannel，Run and Debug下面有一行小字可以创建launch.json,
+点击之后会让选一个模板，就选Lua Debug，选完就创建好了
+### 需要配置的参数
+`runtimeExecutable`: 可执行程序的路径  
+`cwd`: 工作目录，和decoda一个含义  
+`arg`: 程序启动的时候给的命令行参数  
+`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的程序，可以取不同的名字区分开来
+
+配置目录的时候可以用`{$workspaceFolder}`变量来代表vscode打开的工作目录
+
+## 用到的第三方代码
+[decoda](https://github.com/unknownworlds/decoda)  
+[bee.lua](https://github.com/actboy168/bee.lua)  
+[tinyxml](https://github.com/vmayoral/tinyxml)  
+[Lua-Simple-XML-Parser](https://github.com/Cluain/Lua-Simple-XML-Parser)  
+[json.lua](https://github.com/actboy168/json.lua)
+
+## 编译
+需要用到[`luamake`](https://github.com/actboy168/luamake)用来编译bee.lua  
+还需要`vs2019`或者更高的版本
+
+切换到`bee.lua`目录下，运行
+```bat
+luamake
+```
+然后用vs分别编译`launcher`和`LuaInject`两个项目。随后`luadebug.exe`、`launcher.dll`和`LuaInject.dll`出现在`bin`目录下。  
+启动`Run Extension`后打开新的vscode窗口，在里面配置lua的调试
+
+## 项目架构
+项目分成三个部分：`vscode扩展`(src目录)、`Debug Adapater`(script目录)、`LuaInject`(LuaInject目录)
+
+`vscode扩展`部分进行扩展配置和`Debug Dapater`注册  
+`Debug Adapter`处理`vscode扩展`和`LuaInject`之间的消息  
+`LuaInject`注入lua程序，执行真正的断点和lua信息读取
+
+`bee.lua`目录是`Debug Adapter`的启动程序，提供一些运行时库，除此之外只是启动`main.lua`  
+`doc`目录是给`script`下的代码提供代码提示用  
+`launcher`目录编写`luancher.dll`的代码，作用相当于decoda的启动程序部分  
+`libs`提供一些lib文件
+
+### 启动流程
+vscode按扩展注册的启动Debug Adapter(bin/luadebug.exe)，在进行一些列初始化之后，vscode发送`launch`命令，带上在`launch.json`里配置的参数，随后`Debug Adapter`使用`launcher.dll`启动指定的程序，注入`LuaInject.dll`，hook lua代码，随后进行断点的设置。  
+更详细的交互流程参考[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，`Debig Adapter`和vscode之间通信用的是[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，使用stdio通信。
+## 版本
+
+### 1.0.0
+
+初始版本，简单把decoda的功能迁移到vscode，支持debug adapter protocol
+
+### 1.0.1
+重新编译LuaInject.dll
+
+### 1.0.2
+降低vscode版本依赖到1.70
+

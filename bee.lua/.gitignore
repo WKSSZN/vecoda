@@ -1,0 +1,10 @@
+/build/
+/.cache
+/.vs/*
+!/.vs/launch.vs.json
+!/.vs/tasks.vs.json
+/.vscode/ipch/
+/.vscode/c_cpp_properties.json
+/node_modules/
+/package-lock.json
+/package.json
