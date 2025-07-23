@@ -2,9 +2,16 @@
   	"name": "vecoda",
 	"displayName": "vecoda",
 	"description": "use decoda in vscode",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"author": {
 		"name": "wzn"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/WKSSZN/vecoda"
+	},
+	"bugs": {
+		"url": "https://github.com/WKSSZN/vecoda/issues"
 	},
 	"publisher": "wzn",
 	"engines": {

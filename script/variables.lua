@@ -26,7 +26,7 @@ local getVariable = function(reference)
     return variables[reference]
 end
 
-local function parseVariable(root, prefix, frameId)
+local function parseVariable(root, prefix, frameId, t)
     local values = {}
     local name = root:name()
     if name ~= 'table' then
@@ -43,7 +43,7 @@ local function parseVariable(root, prefix, frameId)
             variablesReference = 0,
         }
         if valueel:name() == 'table' then
-            variable.variablesReference = m.createVariable(strkey, ("%s.%s"):format(prefix, strkey), frameId, 1)
+            variable.variablesReference = m.createVariable(strkey, ("%s.%s"):format(prefix, strkey), frameId, t)
             variable.type = "table"
             variable.value = 'table'
         elseif valueel:name() == 'function' then
@@ -99,7 +99,7 @@ function m.variables(reference)
         end
         local xml = xmlSimple.newParser()
         local root = xml:ParseXmlText(ret)
-        local values = parseVariable(root.___children[1], variable.expression, variable.frameId)
+        local values = parseVariable(root.___children[1], variable.expression, variable.frameId, 1)
         variable.value = values
         scopedVariables = values
     else
@@ -150,7 +150,7 @@ function m.evaluate(expression, frameId)
         root = root.___children[1].___children[1]
     end
     if root.___children[1]:name() == 'table' then
-        local arrv = parseVariable(root.___children[1], ("(%s)"):format(expression), frameId)
+        local arrv = parseVariable(root.___children[1], ("(%s)"):format(expression), frameId, 2)
         return {
             result = 'table',
             type = "table",

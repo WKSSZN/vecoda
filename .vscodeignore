@@ -10,3 +10,6 @@ vsc-extension-quickstart.md
 **/*.ts
 LuaInject/**
 bee.lua/**
+libs/**
+launcher/**
+3rd/**
