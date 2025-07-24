@@ -225,4 +225,6 @@ function m.getLoadedFiles()
     return res
 end
 
+m.getId = getBreakpointId
+
 return m

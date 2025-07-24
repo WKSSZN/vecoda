@@ -6,6 +6,7 @@
 	"author": {
 		"name": "wzn"
 	},
+	"icon": "image/logo.png",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/WKSSZN/vecoda"

@@ -461,14 +461,14 @@ int DebugBackend::PostLoadScript(unsigned long api, int result, lua_State* L, co
             // Get the error mesasge.
             const char* message = lua_tostring_dll(api, L, -1);
 
-            // Stop execution.
-            SendBreakEvent(api, L, BreakReason::LoadException, 1);
 
             // Send an error event.
             m_eventChannel.WriteUInt32(EventId_LoadError);
             m_eventChannel.WriteUInt32(reinterpret_cast<int>(L));
             m_eventChannel.WriteString(message);
             m_eventChannel.Flush();
+            // Stop execution.
+            SendBreakEvent(api, L, BreakReason::LoadException, 1);
         
         }
 
@@ -1592,8 +1592,8 @@ int DebugBackend::ErrorHandler(unsigned long api, lua_State* L)
         CriticalSectionTryLock lock(m_breakLock);
         if (lock.IsHeld()) 
         {
-            SendBreakEvent(api, L, BreakReason::Exception, 1);
             SendExceptionEvent(L, message);
+            SendBreakEvent(api, L, BreakReason::Exception, 1);
             WaitForContinue();
         } 
         else 

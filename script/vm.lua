@@ -8,7 +8,6 @@ local message
 
 local threads = {}
 local stackTrace = {}
-local errmsg
 
 function m.init(msg)
     message = msg
@@ -49,14 +48,6 @@ function m.getStackTrace()
         totalFrames = #stackTrace,
         stackFrames = stackTrace
     }
-end
-
-function m.setErrorMessage(errorMessage)
-    errmsg = errorMessage
-end
-
-function m.getErrorMessage()
-    return errmsg
 end
 
 function m.threads()

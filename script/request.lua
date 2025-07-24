@@ -4,6 +4,7 @@ local json = require "json"
 local vm = require 'vm'
 local worker = require 'worker'
 local variables = require 'variables'
+local exception = require 'exception'
 ---@type LuaDebugMessage
 local message
 local handlers = {}
@@ -27,14 +28,7 @@ function handlers.initialize(req)
         supportsTerminateRequest = true,
         -- supportsLogPoints = true,
         -- supportsRestartRequest = true,
-        exceptionBreakpointFilters = {
-            {
-                filter = 'lua',
-                label = 'Lua Exceptions',
-                default = true,
-                description = 'Break on Lua exceptions'
-            }
-        },
+        exceptionBreakpointFilters = exception.getFilters(),
     })
     message.event("initialized")
 end
@@ -73,14 +67,7 @@ function handlers.configurationDone(req)
 end
 
 function handlers.setExceptionBreakpoints(req)
-    message.success(req, {
-        breakpoints = {
-            {
-                verified = true,
-                id = 1,
-            }
-        }
-    })
+    message.success(req, exception.setExceptionBreakpoints(req.arguments.filters))
 end
 
 function handlers.stackTrace(req)
@@ -158,7 +145,7 @@ end
 function handlers.exceptionInfo(req)
     message.success(req, {
         exceptionId = "(EXCEPTION)",
-        description = vm.getErrorMessage(),
+        description = exception.getErrorMessage(),
         breakMode = 'always'
     })
 end
