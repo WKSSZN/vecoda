@@ -3,6 +3,8 @@ local files = require 'files'
 local vm = require 'vm'
 local event = require 'event'
 local exception = require 'exception'
+local breakpoint = require 'breakpoint'
+local xmlSimple = require 'xmlSimple'
 local m = {}
 
 ---@type LuaDebugData
@@ -20,6 +22,21 @@ event.on('toggleBreakpoint', function(file, line)
     debugdata.CommandChannel:WriteUInt32(line)
 end)
 
+local function parseEvaluateResult(success, strret)
+    if strret == '' then
+        return false, "can not get result"
+    end
+    local parser = xmlSimple.newParser()
+    local ok, root = pcall(parser.ParseXmlText, parser, strret)
+    if not ok then
+        return false, "parse xml result failed"
+    end
+    if not success then
+        return false, root.___children[1]:value()
+    end
+    return true, root
+end
+
 event.on('evaluate', function(expression, frameId)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Evaluate)
     debugdata.CommandChannel:WriteUInt32(curVm)
@@ -27,7 +44,7 @@ event.on('evaluate', function(expression, frameId)
     debugdata.CommandChannel:WriteUInt32(frameId)
     local success = debugdata.CommandChannel:ReadBool()
     local result = debugdata.CommandChannel:ReadString()
-    return success, result
+    return parseEvaluateResult(success, result)
 end)
 
 event.on('variable', function(scope, expression, frameId)
@@ -38,7 +55,7 @@ event.on('variable', function(scope, expression, frameId)
     debugdata.CommandChannel:WriteUInt32(frameId)
     local success = debugdata.CommandChannel:ReadBool()
     local result = debugdata.CommandChannel:ReadString()
-    return success, result
+    return parseEvaluateResult(success, result)
 end)
 
 function m.init(data)
@@ -53,7 +70,7 @@ local breakReasons = {
     [4] = 'exception',
 }
 
-local function handleBreak(nvm, hitBreakpoint)
+local function handleBreak(nvm, bp, tryStop)
     local reason = debugdata.EventChannel:ReadUInt32()
     local numStackFrames = debugdata.EventChannel:ReadUInt32()
     local stacks = {}
@@ -77,23 +94,27 @@ local function handleBreak(nvm, hitBreakpoint)
             }
         end
     end
-    if hitBreakpoint then
+    if not bp and not tryStop then
+        message.output("stderr", exception.getErrorMessage())
+        debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
+        debugdata.CommandChannel:WriteUInt32(curVm)
+        return
+    end
+    if not bp and reason == 1 then
+        bp = breakpoint.getBreakpoint(stacks[1].fileId, stacks[1].line)
+    end
+    if not bp or breakpoint.exec(bp, stacks[1].id) then
         vm.setStacks(stacks)
-        if type(hitBreakpoint) ~= "number" then
-            hitBreakpoint = files.getBreakpointId(stacks[1].fileId, stacks[1].line)
-        end
         message.event('stopped', {
             reason = breakReasons[reason],
             threadId = nvm,
-            hitBreakpointIds = hitBreakpoint and { hitBreakpoint } or nil,
+            hitBreakpointIds = bp and { bp.id } or nil,
             allThreadsStopped = true,
         })
         event.emit('stopped')
     else
-        message.output("stderr", exception.getErrorMessage())
-        -- m.continue()
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt32(curVm) -- vm
+        debugdata.CommandChannel:WriteUInt32(curVm)
     end
 end
 
@@ -139,7 +160,7 @@ function m.update(msg)
         event.emit('setBreakpoints', fileId, line, set == 1)
     elseif eventId == launcher.EventId_Break then
         curVm = nvm
-        handleBreak(nvm, true)
+        handleBreak(nvm, nil, true)
     elseif eventId == launcher.EventId_NameVM then
         debugdata.EventChannel:ReadString()
     elseif eventId == launcher.EventId_DestroyVM then
@@ -147,11 +168,11 @@ function m.update(msg)
     elseif eventId == launcher.EventId_LoadError or eventId == launcher.EventId_Exception then
         curVm = nvm
         local errorMsg = debugdata.EventChannel:ReadString()
-        local exceptionBpId = exception.getBpId(eventId)
+        local bp = breakpoint.getExceptionBreakpoint(eventId)
         exception.setErrorMessage(errorMsg)
         debugdata.EventChannel:ReadUInt32()
         debugdata.EventChannel:ReadUInt32()
-        handleBreak(nvm, exceptionBpId)
+        handleBreak(nvm, bp, bp ~= nil)
     end
 end
 

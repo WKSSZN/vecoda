@@ -75,9 +75,9 @@ function m.variables(reference)
     local scopedVariables = {}
     if not variable then return end
     if not variable.value then
-        local success, ret
+        local success, root
         if variable.type == 2 then
-            success, ret = event.emit('evaluate', variable.expression, variable.frameId)
+            success, root = event.emit('evaluate', variable.expression, variable.frameId)
         else
             local scope, expression = variable.expression:match '(%([^%)]+%))([^$]*)'
             if not scope then
@@ -90,15 +90,13 @@ function m.variables(reference)
                     break
                 end
             end
-            success, ret = event.emit('variable', nscope, expression, variable.frameId)
+            success, root = event.emit('variable', nscope, expression, variable.frameId)
         end
         if not success then
             return {
-                error = ret
+                error = {format = root, id = 3}
             }
         end
-        local xml = xmlSimple.newParser()
-        local root = xml:ParseXmlText(ret)
         local values = parseVariable(root.___children[1], variable.expression, variable.frameId, 1)
         variable.value = values
         scopedVariables = values
@@ -121,29 +119,15 @@ function m.scopes(frameId)
 end
 
 function m.evaluate(expression, frameId)
-    local success, result = event.emit('evaluate', expression, frameId)
+    local success, root = event.emit('evaluate', expression, frameId)
     if not success then
-        message.output('stderr', 'Evaluate failed: ' .. tostring(result))
         return {
-            error = {format = tostring(result), id = 2},
-        }
-    end
-    local parser = xmlSimple.newParser()
-    local ok, root = pcall(parser.ParseXmlText, parser, result)
-    if not ok then
-        message.output('stderr', 'XML parse error: ' .. tostring(root))
-        return {
-            error = {format = 'XML parse error: ' .. tostring(root), id = 2},
+            error = {format = root, id = 2},
         }
     end
     if root:numChildren() == 0 then
         return {
             error = {format = "no result", id = 2}
-        }
-    end
-    if root.___children[1]:name() == 'error' then
-        return {
-            error = root.error:value()
         }
     end
     if root.___children[1]:name() == 'values' then -- 只取第一个显示

@@ -5,6 +5,7 @@ local vm = require 'vm'
 local worker = require 'worker'
 local variables = require 'variables'
 local exception = require 'exception'
+local breakpoint = require 'breakpoint'
 ---@type LuaDebugMessage
 local message
 local handlers = {}
@@ -18,7 +19,7 @@ function handlers.initialize(req)
         supportsConfigurationDoneRequest = true,
         supportsVariableType = true,
         supportsEvaluateForHovers = true,
-        -- supportsConditionalBreakpoints = true,
+        supportsConditionalBreakpoints = true,
         -- supportsSetVariable = true,
         -- supportsCompletionsRequest = false,
         supportsExceptionInfoRequest = true,
@@ -26,23 +27,17 @@ function handlers.initialize(req)
         supportsDelayedStackTraceLoading = false,
         supportsLoadedSourcesRequest = true,
         supportsTerminateRequest = true,
-        -- supportsLogPoints = true,
+        supportsLogPoints = true,
+        supportsHitConditionalBreakpoints = true,
         -- supportsRestartRequest = true,
-        exceptionBreakpointFilters = exception.getFilters(),
+        exceptionBreakpointFilters = breakpoint.getFilters(),
     })
     message.event("initialized")
 end
 
 function handlers.setBreakpoints(req)
     local arg = req.arguments
-    local source = arg.source
-    local id
-    if source.sourceFeference and source.sourceFeference > 0 then
-        id = source.sourceFeference
-    else
-        id = source.path
-    end
-    local breakpoints = files.setBreakpoints(id, arg.breakpoints)
+    local breakpoints = breakpoint.setBreakpoints(arg.source.path, arg.breakpoints)
     message.success(req, {
         breakpoints = breakpoints
     })
@@ -67,7 +62,7 @@ function handlers.configurationDone(req)
 end
 
 function handlers.setExceptionBreakpoints(req)
-    message.success(req, exception.setExceptionBreakpoints(req.arguments.filters))
+    message.success(req, breakpoint.setExceptionBreakpoints(req.arguments.filters))
 end
 
 function handlers.stackTrace(req)
@@ -85,7 +80,7 @@ function handlers.variables(req)
 end
 
 function handlers.evaluate(req)
-    local ret = variables.evaluate(req.arguments.expression, req.arguments.frameId)
+    local ret = variables.evaluate(req.arguments.expression, req.arguments.frameId or 0)
     if ret.error then
         message.error(req, ret)
     else
@@ -190,6 +185,7 @@ function m.init(msg)
     files.init(msg, "")
     vm.init(msg)
     variables.init(msg)
+    breakpoint.init(msg)
 end
 
 m.getSeq = getSeq

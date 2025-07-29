@@ -102,6 +102,20 @@ function m.newParser()
     return XmlParser
 end
 
+local function value(node) return node.__value end
+local function setValue(node, val) node.__value = val end
+local function name(node) return node.__name end
+local function setName(node, name) node.__name = name end
+local function children(node) return node.___children end
+local function numChildren(node) return #node.___children end
+local function addChild(node, child)
+    if node[name(child)] ~= nil then
+        table.insert(node[name(child)], child)
+    else
+        node[name(child)] = {child}
+    end
+end
+
 function m.newNode(name)
     local node = {}
     node.___value = nil
