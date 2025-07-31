@@ -76,6 +76,9 @@ local function parseVariable(root, prefix, frameId, t)
         end
         values[#values + 1] = variable
     end
+    table.sort(values, function (a, b)
+        return a.name < b.name
+    end)
     return values
 end
 
