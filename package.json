@@ -60,6 +60,15 @@
 								"markdownDescription": "可执行程序目录"
 							}
 						}
+					},
+					"attach": {
+						"properties": {
+							"cwd": {
+								"default": "${workspaceFolder}",
+								"type" : "string",
+								"markdownDescription": "工作目录"
+							}
+						}
 					}
 				},
 				"configurationSnippets": [

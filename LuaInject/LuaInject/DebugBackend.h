@@ -64,11 +64,6 @@ public:
     static void Destroy();
 
     /**
-     * Writes to the log.
-     */
-    void Log(const char* fmt, ...);
-
-    /**
      * Initializes the server.
      */
     bool Initialize(HINSTANCE hInstance);
@@ -259,6 +254,7 @@ private:
         std::string                 title;
         std::vector<unsigned int>   breakpoints;    // Lines that have breakpoints on them.
         std::vector<unsigned int>   validLines;     // Lines that can have breakpoints on them.
+        CodeState                   state;
 
     };
 
@@ -539,11 +535,6 @@ private:
      */
     void GetFileTitle(const char* name, std::string& title) const;
 
-    /**
-     * Logs information about a hook callback event. This is used for debugging.
-     */
-    void LogHookEvent(unsigned long api, lua_State* L, lua_Debug* ar);
-
     void UpdateHookMode(unsigned long api, lua_State* L, lua_Debug* hookEvent);
 
     /**
@@ -583,6 +574,8 @@ private:
     unsigned int GetUnifiedStack(unsigned long api, const StackEntry nativeStack[], unsigned int nativeStackSize,
         const lua_Debug scriptStack[], unsigned int scriptStackSize,
         StackEntry unifiedStack[]);
+
+    void WaitForAttach();
 
 private:
 

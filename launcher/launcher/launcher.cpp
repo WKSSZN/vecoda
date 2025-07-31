@@ -4,6 +4,7 @@ extern "C" {
 
 #include <Windows.h>
 #include <ImageHlp.h>
+#include <Psapi.h>
 #include <string.h>
 #include "Channel.h"
 
@@ -147,6 +148,29 @@ std::string injectDll(DWORD processId, const char* dllFileName) {
 	return message;
 }
 
+bool hasModule(const char* name, HANDLE hProcess)
+{
+	HMODULE hMods[1024];
+	DWORD cbNeeded;
+	if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
+	{
+		for (size_t i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+		{
+			char filePath[MAX_PATH];
+			if (GetModuleFileNameExA(hProcess, hMods[i], filePath, MAX_PATH))
+			{
+				std::string moduleName = filePath;
+				size_t found = moduleName.find_last_of("\\/");
+				if (found != std::string::npos && moduleName.substr(found + 1) == name)
+				{
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 extern "C" {
 	int launchProcess(lua_State* L) {
 		const char* exeFileName = luaL_checkstring(L, 1);
@@ -245,15 +269,17 @@ extern "C" {
 		// inject dll
 		std::string message;
 		if ((message = injectDll(processInfo.dwProcessId, "LuaInject.dll")).size() != 0) {
+			delete eventChannel;
+			delete commandChannel;
 			return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
 		}
 
 		eventChannel->WaitForConnection();
 		
 
-		unsigned int command;
-		eventChannel->ReadUInt32(command);
-		if (command != EventId_Initialize) {
+		unsigned int eventId;
+		eventChannel->ReadUInt32(eventId);
+		if (eventId != EventId_Initialize) {
 			return luaL_error(L, "Dll has not Inittialize Event");
 		}
 
@@ -288,6 +314,139 @@ extern "C" {
 		luaL_getmetatable(L, "FRONTENDMETA");
 		lua_setmetatable(L, -2);
 		return 1;
+	}
+
+	int attachProcess(lua_State* L)
+	{
+		DWORD processId = luaL_checkinteger(L, 1);
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE | PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, processId);
+		if (hProcess == NULL)
+		{
+			return luaL_error(L, "open process[%x] failed", processId);
+		}
+		bool needInject = !hasModule("LuaInject.dll", hProcess);
+		Channel* eventChannel;
+		Channel* commandChannel;
+
+		if (needInject)
+		{
+			char pipeName[256];
+			_snprintf(pipeName, 256, "Vecoda.Event.%x", processId);
+			eventChannel = new Channel();
+			if (!eventChannel->Create(pipeName)) {
+				delete eventChannel;
+				return luaL_error(L, "create event channel failed");
+			}
+			_snprintf(pipeName, 256, "Vecoda.Command.%x", processId);
+			commandChannel = new Channel();
+			if (!commandChannel->Create(pipeName)) {
+				delete commandChannel;
+				return luaL_error(L, "create command channel failed");
+			}
+			auto message = injectDll(processId, "LuaInject.dll");
+			if (message.size() != 0)
+			{
+				delete eventChannel;
+				delete commandChannel;
+				return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
+			}
+			
+			eventChannel->WaitForConnection();
+
+
+			unsigned int eventId;
+			eventChannel->ReadUInt32(eventId);
+			if (eventId != EventId_Initialize) {
+				return luaL_error(L, "Dll has not Inittialize Event");
+			}
+
+			unsigned int function;
+			eventChannel->ReadUInt32(function);
+
+			DWORD threadId;
+			HANDLE thread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
+			if (thread == NULL) {
+				return luaL_error(L, "run dll thread failed");
+			}
+
+			DWORD exitCode;
+			WaitForSingleObject(thread, INFINITE);
+			GetExitCodeThread(thread, &exitCode);
+
+			CloseHandle(thread);
+			lua_pushnil(L);
+		}
+		else
+		{
+			char pipeName[256];
+			_snprintf(pipeName, 256, "Vecoda.Attach.%x", processId);
+			Channel retachChannel;
+			if (!retachChannel.Connect(pipeName))
+			{
+				return luaL_error(L, "failed to connect to process %x", processId);
+			}
+			_snprintf(pipeName, 256, "Vecoda.Event.%x", processId);
+			eventChannel = new Channel();
+			if (!eventChannel->Create(pipeName)) {
+				delete eventChannel;
+				return luaL_error(L, "create event channel failed");
+			}
+			_snprintf(pipeName, 256, "Vecoda.Command.%x", processId);
+			commandChannel = new Channel();
+			if (!commandChannel->Create(pipeName)) {
+				delete commandChannel;
+				return luaL_error(L, "create command channel failed");
+			}
+			lua_newtable(L);
+			lua_newtable(L);
+			int vms = lua_gettop(L);
+			retachChannel.WriteUInt32(0);
+			unsigned int num;
+			retachChannel.ReadUInt32(num);
+			for (size_t i = 0; i < num; i++)
+			{
+				unsigned int vm;
+				retachChannel.ReadUInt32(vm);
+				lua_pushnumber(L, vm);
+				lua_rawseti(L, vms, i + 1);
+			}
+			lua_setfield(L, -2, "vms");
+			lua_newtable(L);
+			int scripts = lua_gettop(L);
+			retachChannel.ReadUInt32(num);
+			for (size_t i = 0; i < num; i++)
+			{
+				std::string str;
+				lua_newtable(L);
+				retachChannel.ReadString(str);
+				lua_pushstring(L, str.c_str());
+				lua_setfield(L, -2, "name");
+				retachChannel.ReadString(str);
+				lua_pushstring(L, str.c_str());
+				lua_setfield(L, -2, "source");
+				unsigned int state;
+				retachChannel.ReadUInt32(state);
+				lua_pushnumber(L, static_cast<lua_Number>(state));
+				lua_setfield(L, -2, "state");
+				lua_rawseti(L, scripts, i + 1);
+			}
+			lua_setfield(L, -2, "scripts");
+		}
+
+		lua_newtable(L);
+		lua_pushlightuserdata(L, eventChannel);
+		luaL_getmetatable(L, "CHANNELMETA");
+		lua_setmetatable(L, -2);
+		lua_setfield(L, -2, "EventChannel");
+		lua_pushlightuserdata(L, commandChannel);
+		luaL_getmetatable(L, "CHANNELMETA");
+		lua_setmetatable(L, -2);
+		lua_setfield(L, -2, "CommandChannel");
+		lua_pushlightuserdata(L, hProcess);
+		lua_setfield(L, -2, "Process");
+		luaL_getmetatable(L, "FRONTENDMETA");
+		lua_setmetatable(L, -2);
+		return 2;
 	}
 
 	int channel_readUInt32(lua_State* L) {
@@ -400,6 +559,7 @@ extern "C" {
 static luaL_Reg luaLibs[] =
 {
 	{"Launch", launchProcess},
+	{"Attach", attachProcess},
 	{NULL, NULL}
 };
 

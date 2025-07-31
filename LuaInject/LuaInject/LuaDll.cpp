@@ -945,7 +945,7 @@ bool GetAreInterceptsEnabled()
 
 void RegisterDebugLibrary(unsigned long api, lua_State* L)
 {
-    lua_register_dll(api, L, "decoda_output", g_interfaces[api].DecodaOutput);
+    lua_register_dll(api, L, "vecoda_output", g_interfaces[api].DecodaOutput);
 }
 
 int GetGlobalsIndex(unsigned long api)
@@ -3749,9 +3749,9 @@ void LoadSymbolsRecursively(std::set<std::string>& loadedModules, std::unordered
 
                 if (luaFile)
                 {
-                    char message[1024];
-                    _snprintf(message, 1024, "Warning 1001: '%s' appears to contain Lua functions however no Lua functions could located with the symbolic information", moduleFileName);
-                    DebugBackend::Get().Message(message, MessageType_Warning);
+                   char message[1024];
+                   _snprintf(message, 1024, "Warning 1001: '%s' appears to contain Lua functions however no Lua functions could located with the symbolic information", moduleFileName);
+                   DebugBackend::Get().Message(message, MessageType_Warning);
                 }
 
             }

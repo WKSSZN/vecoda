@@ -9,6 +9,13 @@ local launcher = {}
 ---@return LuaDebugData
 function launcher.Launch(exeFilePath, commandArgs, workingDirectory)end
 
+---@alias T number
+---附加到指定进程
+---@param processId number 进程id
+---@return {vms:number[],scripts:[{name:string,source:string,state:number}]}|nil 上一次Inject时的数据
+---@return LuaDebugData
+function launcher.Attach(processId)end
+
 --[[
 enum EventId
 {

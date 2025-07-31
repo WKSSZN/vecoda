@@ -57,6 +57,33 @@ function handlers.launch(req)
     message.success(req)
 end
 
+function handlers.attach(req)
+    local cwd = req.arguments.cwd
+    local processId = tonumber(req.arguments.processId)
+    if processId == nil then
+        message.error(req, {error = "error process:" .. req.arguments.processId})
+        return
+    end
+    local ok, predata, debugData = pcall(launcher.Attach, processId)
+    if not ok then
+        message.error(req, {error = "Attach failed:" .. predata})
+        return
+    end
+    files.init(message, cwd)
+    worker.init(debugData)
+    message.success(req)
+    if predata then
+        for _, nvm in ipairs(predata.vms) do
+            vm.newThread(nvm)
+        end
+        for _, script in ipairs(predata.scripts) do
+            if script.state == 0 then
+                files.addFile(script.name, script.source)
+            end
+        end
+    end
+end
+
 function handlers.configurationDone(req)
     message.success(req)
 end
@@ -96,7 +123,11 @@ end
 
 function handlers.disconnect(req)
     message.stop()
-    worker.detach()
+    if req.arguments.terminateDebuggee then
+        worker.stop()
+    else
+        worker.detach()
+    end
     message.success(req)
 end
 

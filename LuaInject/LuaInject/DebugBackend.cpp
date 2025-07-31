@@ -218,37 +218,6 @@ void DebugBackend::CreateApi(unsigned long apiIndex)
 
 }
 
-void DebugBackend::Log(const char* fmt, ...)
-{
-
-    if (m_log == NULL)
-    {
-        char fileName[_MAX_PATH];
-        if (GetStartupDirectory(fileName, _MAX_PATH))
-        {
-            strcat(fileName, "log.txt");
-            m_log = fopen("c:/temp/log.txt", "wt");
-        }
-    }
-
-    if (m_log != NULL)
-    {
-
-        char buffer[1024];
-
-        va_list    ap;
-
-        va_start(ap, fmt);
-        _vsnprintf(buffer, 1024, fmt, ap);
-        va_end(ap);
-
-        fputs(buffer, m_log);
-        fflush(m_log);
-
-    }
-
-}
-
 bool DebugBackend::Initialize(HINSTANCE hInstance)
 {
 
@@ -529,7 +498,7 @@ int DebugBackend::RegisterScript(lua_State* L, const char* source, size_t size, 
     CriticalSectionLock lock(m_criticalSection);
 
     bool freeName = false;
-
+    bool noname = false;
     // If no name was specified, use the source as the name. This is similar to what
     // built-in Lua functions like luaL_loadstring do.
     if (name == NULL)
@@ -540,6 +509,7 @@ int DebugBackend::RegisterScript(lua_State* L, const char* source, size_t size, 
         temp[size] = 0;
         name = temp;
         freeName = true;
+        noname = true;
     }
 
     // Check that we haven't already assigned this script an index. That happens
@@ -600,7 +570,7 @@ int DebugBackend::RegisterScript(lua_State* L, const char* source, size_t size, 
 
     // Check if the file name is actually the source. This happens when calling
     // luaL_loadstring and doesn't make for a very good display.
-    if (source != NULL && strncmp(name, source, length) == 0)
+    if (noname && source != NULL && strncmp(name, source, length) == 0)
     {
         char buffer[32];
         sprintf(buffer, "@Untitled%d.lua", scriptIndex + 1);
@@ -635,6 +605,8 @@ int DebugBackend::RegisterScript(lua_State* L, const char* source, size_t size, 
             source = NULL;
         }
     }
+
+    script->state = state;
 
     m_eventChannel.WriteUInt32(EventId_LoadScript);
     m_eventChannel.WriteUInt32(reinterpret_cast<int>(L));
@@ -959,7 +931,7 @@ void DebugBackend::UpdateHookMode(unsigned long api, lua_State* L, lua_Debug* ho
 
     if(!vm->haveActiveBreakpoints)
     {
-        mode = HookMode_None;
+        mode = HookMode_CallsAndReturns;
     }
 
     if(currentMode != mode)
@@ -993,6 +965,11 @@ bool DebugBackend::StackHasBreakpoint(unsigned long api, lua_State* L)
         vm->lastFunctions = GetSource( api, &functionInfo);
 
         int scriptIndex = GetScriptIndex(vm->lastFunctions.c_str());
+        if (scriptIndex == -1)
+        {
+            RegisterScript(api, L, &functionInfo);
+            scriptIndex = GetScriptIndex(vm->lastFunctions.c_str());
+        }
         
         Script* script = scriptIndex != -1 ? m_scripts[scriptIndex] : NULL;
 
@@ -1194,23 +1171,23 @@ void DebugBackend::CommandThreadProc()
 
     }
 
+
     // Cleanup.
-
-    m_classInfos.clear();
-
-    for (unsigned int i = 0; i < m_scripts.size(); ++i)
-    {
-        delete m_scripts[i];
-    }
-
-    m_nameToScript.clear();
-
-    m_scripts.clear();
-    ClearVector(m_vms);
-    m_stateToVm.clear();
-
     m_eventChannel.Destroy();
     m_commandChannel.Destroy();
+    if (continueRunning) {
+        DeleteAllBreakpoints();
+        WaitForAttach();
+        return;
+    }
+    else
+    {
+        m_classInfos.clear();
+        ClearVector(m_scripts);
+        m_nameToScript.clear();
+        ClearVector(m_vms);
+        m_stateToVm.clear();
+    }
     
 }
 
@@ -2848,13 +2825,12 @@ TiXmlNode* DebugBackend::GetTableAsText(unsigned long api, lua_State* L, int t, 
     // later once we've put additional stuff on the stack.
     t = lua_absindex_dll(api, L, t);
 
-    TiXmlNode* node = new TiXmlElement("table");
+    TiXmlElement* node = new TiXmlElement("table");
 
     if (typeNameOverride)
     {
         node->LinkEndChild( WriteXmlNode("type", typeNameOverride) );
     }
-
     if (maxDepth > 0)
     {
 
@@ -2882,7 +2858,14 @@ TiXmlNode* DebugBackend::GetTableAsText(unsigned long api, lua_State* L, int t, 
         }    
     
     }
-
+    lua_pushnil_dll(api, L);
+    if (lua_next_dll(api, L, t) != 0) {
+        lua_pop_dll(api, L, 2);
+    }
+    else
+    {
+        node->SetAttribute("empty", 1);
+    }
     int t2 = lua_gettop_dll(api, L);
     assert(t2 - t1 == 0);
 
@@ -3348,18 +3331,6 @@ bool DebugBackend::EnableJit(unsigned long api, lua_State* L, bool enable)
 
 }
 
-void DebugBackend::LogHookEvent(unsigned long api, lua_State* L, lua_Debug* ar)
-{
-
-    const char* eventType = GetHookEventName( api, ar);
-
-    // Get some more information about the event.
-    lua_getinfo_dll(api, L, "Sln", ar);
-
-    Log("Hook Event %s, line %d %s %s\n", eventType, GetCurrentLine(api, ar), GetName(api, ar), GetSource(api, ar));
-
-}
-
 unsigned int DebugBackend::GetCStack(HANDLE hThread, StackEntry stack[], unsigned int maxStackSize)
 {
 
@@ -3513,3 +3484,39 @@ unsigned int DebugBackend::GetUnifiedStack(unsigned long api, const StackEntry n
 
 }
 
+void DebugBackend::WaitForAttach()
+{
+    Channel retachChannel;
+    DWORD processId = GetCurrentProcessId();
+    char name[256];
+    _snprintf(name, 256, "Vecoda.Attach.%x", processId);
+    retachChannel.Create(name);
+    retachChannel.WaitForConnection();
+    unsigned int unuse;
+    retachChannel.ReadUInt32(unuse);
+
+    _snprintf(name, 256, "Vecoda.Event.%x", processId);
+    m_eventChannel.Connect(name);
+    _snprintf(name, 256, "Vecoda.Command.%x", processId);
+    m_commandChannel.Connect(name);
+    ActiveLuaHookInAllVms();
+
+    ResetEvent(m_detachEvent);
+    ResetEvent(m_stepEvent);
+    ResetEvent(m_loadEvent);
+    // Start a new thread to handle the incoming event channel.
+    DWORD threadId;
+    m_commandThread = CreateThread(NULL, 0, StaticCommandThreadProc, this, 0, &threadId);
+    // send all info
+    retachChannel.WriteUInt32(m_vms.size());
+    for (auto it = m_vms.begin(); it != m_vms.end(); ++it)
+    {
+        retachChannel.WriteUInt32(reinterpret_cast<unsigned int>((*it)->L));
+    }
+    retachChannel.WriteUInt32(m_scripts.size());
+    for (auto it = m_scripts.begin(); it != m_scripts.end(); ++it) {
+        retachChannel.WriteString((*it)->name);
+        retachChannel.WriteString((*it)->source);
+        retachChannel.WriteUInt32((*it)->state);
+    }
+}

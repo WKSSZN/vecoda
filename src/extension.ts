@@ -1,6 +1,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path'
+import { pick } from './pickProcess';
 let extensionDirectory:string
 
 export function activate(context: vscode.ExtensionContext) {
@@ -12,7 +13,13 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 class ResolveConfigurationProvider implements vscode.DebugConfigurationProvider {
-	resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, debugConfiguration: vscode.DebugConfiguration, token?: vscode.CancellationToken): vscode.ProviderResult<vscode.DebugConfiguration> {
+	async resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, debugConfiguration: vscode.DebugConfiguration, token?: vscode.CancellationToken): Promise<vscode.DebugConfiguration | null | undefined> {
+		if (debugConfiguration.request == "attach") {
+			debugConfiguration.processId = await pick()
+			if (debugConfiguration.processId == "") {
+				return
+			}
+		}
 		return debugConfiguration
 	}
 }
