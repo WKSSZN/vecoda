@@ -36,6 +36,7 @@ function handlers.initialize(req)
 end
 
 function handlers.setBreakpoints(req)
+    message.output('stdout', "setBreakpoints")
     local arg = req.arguments
     local breakpoints = breakpoint.setBreakpoints(arg.source.path, arg.breakpoints)
     message.success(req, {

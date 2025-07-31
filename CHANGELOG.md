@@ -1,5 +1,9 @@
 # Change Log
 
+### 1.1.0
+增加attach功能    
+修改logo     
+优化table的显示，按key排序，空table不用展开
 ### 1.0.5
 修改logo  
 支持condition breakpoint, hit breakpoint, logMessage
