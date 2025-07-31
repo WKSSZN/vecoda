@@ -43,9 +43,18 @@ local function parseVariable(root, prefix, frameId, t)
             variablesReference = 0,
         }
         if valueel:name() == 'table' then
-            variable.variablesReference = m.createVariable(strkey, ("%s.%s"):format(prefix, strkey), frameId, t)
             variable.type = "table"
-            variable.value = 'table'
+            if valueel['@empty'] then
+                variable.value = '{}'
+            else
+                variable.value = 'table'
+                if keytype == 'number' then
+                    strkey = strkey
+                else
+                    strkey = "." .. strkey
+                end
+                variable.variablesReference = m.createVariable(strkey, ("%s%s"):format(prefix, strkey), frameId, t)
+            end
         elseif valueel:name() == 'function' then
             variable.value = "function"
             variable.type = 'function'
@@ -94,10 +103,10 @@ function m.variables(reference)
         end
         if not success then
             return {
-                error = {format = root, id = 3}
+                error = { format = root, id = 3 }
             }
         end
-        local values = parseVariable(root.___children[1], variable.expression, variable.frameId, 1)
+        local values = parseVariable(root.___children[1], variable.expression, variable.frameId, variable.type)
         variable.value = values
         scopedVariables = values
     else
@@ -122,12 +131,12 @@ function m.evaluate(expression, frameId)
     local success, root = event.emit('evaluate', expression, frameId)
     if not success then
         return {
-            error = {format = root, id = 2},
+            error = { format = root, id = 2 },
         }
     end
     if root:numChildren() == 0 then
         return {
-            error = {format = "no result", id = 2}
+            error = { format = "no result", id = 2 }
         }
     end
     if root.___children[1]:name() == 'values' then -- 只取第一个显示
@@ -135,11 +144,18 @@ function m.evaluate(expression, frameId)
     end
     if root.___children[1]:name() == 'table' then
         local arrv = parseVariable(root.___children[1], ("(%s)"):format(expression), frameId, 2)
-        return {
-            result = 'table',
-            type = "table",
-            variablesReference = m.createVariable(expression, ("(%s)"):format(expression), frameId, 2, arrv)
-        }
+        if #arrv > 0 then
+            return {
+                result = 'table',
+                type = "table",
+                variablesReference = m.createVariable(expression, ("(%s)"):format(expression), frameId, 2, arrv)
+            }
+        else
+            return {
+                result = '{}',
+                type = 'table',
+            }
+        end
     elseif root.___children[1]:name() == 'value' then
         root = root.___children[1]
         local v = root.___children[1]:value()
@@ -170,7 +186,7 @@ function m.evaluate(expression, frameId)
         return ret
     end
     return {
-        error = {format = "no result", id = 2}
+        error = { format = "no result", id = 2 }
     }
 end
 
