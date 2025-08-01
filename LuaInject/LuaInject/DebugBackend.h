@@ -130,6 +130,10 @@ public:
      */
     bool Evaluate(unsigned long api, lua_State* L, const std::string& expression, int stackLevel, std::string& result);
 	bool Variable(unsigned long api, lua_State* L, Scope scope, const std::string& expression, int stackLevel, std::string& result);
+    void CopyLocal(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry);
+    void CopyUpvalue(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry);
+    void CopyGlobal(unsigned long api, lua_State* L, lua_Debug* stackEntry);
+    TiXmlNode* GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel, lua_Debug* stackEntry);
 
     /**
      * Evalates the expression. If there was an error evaluating the expression the

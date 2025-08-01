@@ -76,9 +76,6 @@ local function parseVariable(root, prefix, frameId, t)
         end
         values[#values + 1] = variable
     end
-    table.sort(values, function (a, b)
-        return a.name < b.name
-    end)
     return values
 end
 
@@ -87,7 +84,7 @@ function m.variables(reference)
     local scopedVariables = {}
     if not variable then return end
     if not variable.value then
-        local success, root
+        local success, root, noSort
         if variable.type == 2 then
             success, root = event.emit('evaluate', variable.expression, variable.frameId)
         else
@@ -103,6 +100,9 @@ function m.variables(reference)
                 end
             end
             success, root = event.emit('variable', nscope, expression, variable.frameId)
+            if nscope and scope == variable.expression then
+                noSort = true
+            end
         end
         if not success then
             return {
@@ -110,6 +110,11 @@ function m.variables(reference)
             }
         end
         local values = parseVariable(root.___children[1], variable.expression, variable.frameId, variable.type)
+        if not noSort then
+            table.sort(values, function(a, b)
+                return a.name < b.name
+            end)
+        end
         variable.value = values
         scopedVariables = values
     else
@@ -148,6 +153,9 @@ function m.evaluate(expression, frameId)
     if root.___children[1]:name() == 'table' then
         local arrv = parseVariable(root.___children[1], ("(%s)"):format(expression), frameId, 2)
         if #arrv > 0 then
+            table.sort(arrv, function(a, b)
+                return a.name < b.name
+            end)
             return {
                 result = 'table',
                 type = "table",

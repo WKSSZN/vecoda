@@ -1650,26 +1650,12 @@ void DebugBackend::ChainTables(unsigned long api, lua_State* L, int child, int p
 
 }
 
-bool DebugBackend::CreateEnvironment(unsigned long api, lua_State* L, int stackLevel, int nilSentinel)
+void DebugBackend::CopyLocal(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry)
 {
-
-    int t1 = lua_gettop_dll(api, L);
-
-    lua_Debug stackEntry = { 0 };
-
-    if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
-    {
-        return false;
-    }
-
     const char* name = NULL;
-
-    // Copy the local variables into a new table.
-
     lua_newtable_dll(api, L);
     int localTable = lua_gettop_dll(api, L);
-
-    for (int local = 1; name = lua_getlocal_dll(api, L, &stackEntry, local); ++local) 
+    for (int local = 1; name = lua_getlocal_dll(api, L, stackEntry, local); ++local)
     {
         if (!GetIsInternalVariable(name))
         {
@@ -1693,21 +1679,23 @@ bool DebugBackend::CreateEnvironment(unsigned long api, lua_State* L, int stackL
             lua_pop_dll(api, L, 1);
         }
     }
+}
 
-    // Copy the up values into a new table.
-    
+void DebugBackend::CopyUpvalue(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry)
+{
+    const char* name = NULL;
     lua_newtable_dll(api, L);
     int upValueTable = lua_gettop_dll(api, L);
-    
+
     // Get the function which is the call stack entry so that we can examine
     // the up values and get the environment.
-    lua_getinfo_dll(api, L, "fu", &stackEntry);
+    lua_getinfo_dll(api, L, "fu", stackEntry);
     int functionIndex = lua_gettop_dll(api, L);
 
-    for (int upValue = 1; name = lua_getupvalue_dll(api, L, functionIndex, upValue); ++upValue) 
+    for (int upValue = 1; name = lua_getupvalue_dll(api, L, functionIndex, upValue); ++upValue)
     {
         // C function up values has no name, so skip those.
-        if( name && *name)
+        if (name && *name)
         {
             // If the value is nil, we use the nil sentinel so we can differentiate
             // between undeclared, and declared but set to nil for lexical scoping.
@@ -1729,18 +1717,50 @@ bool DebugBackend::CreateEnvironment(unsigned long api, lua_State* L, int stackL
             lua_pop_dll(api, L, 1);
         }
     }
+    lua_remove_dll(api, L, functionIndex);
+}
+
+
+void DebugBackend::CopyGlobal(unsigned long api, lua_State* L, lua_Debug* stackEntry)
+{
+    lua_getinfo_dll(api, L, "fu", stackEntry);
+    int functionIndex = lua_gettop_dll(api, L);
+    lua_getfenv_dll(api, L, functionIndex);
+    lua_remove_dll(api, L, functionIndex);
+}
+
+bool DebugBackend::CreateEnvironment(unsigned long api, lua_State* L, int stackLevel, int nilSentinel)
+{
+
+    int t1 = lua_gettop_dll(api, L);
+
+    lua_Debug stackEntry = { 0 };
+
+    if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
+    {
+        return false;
+    }
+
+    const char* name = NULL;
+
+    // Copy the local variables into a new table.
+    CopyLocal(api, L, nilSentinel, &stackEntry);
+    int localTable = lua_gettop_dll(api, L);
+
+    // Copy the up values into a new table.
+    CopyUpvalue(api, L, nilSentinel, &stackEntry);
+    int upValueTable = lua_gettop_dll(api, L);
 
     // Create an environment table that chains all three of the tables together.
     // They are accessed like this: local -> upvalue -> global
     
-    lua_getfenv_dll(api, L, functionIndex);
+    CopyGlobal(api, L, &stackEntry);
     int globalTable = lua_gettop_dll(api, L);
 
     CreateChainedTable(api, L, nilSentinel, localTable, upValueTable, globalTable);
 
-    // Remove the function and global table from the stack.
+    // Remove the global table from the stack.
     lua_remove_dll(api, L, globalTable);
-    lua_remove_dll(api, L, functionIndex);
 
     int t2 = lua_gettop_dll(api, L);
     assert(t2 - t1 == 3);
@@ -2147,6 +2167,87 @@ bool DebugBackend::Evaluate(unsigned long api, lua_State* L, const std::string& 
 
 }
 
+
+TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel, lua_Debug* stackEntry)
+{
+    TiXmlNode* node;
+    if (scope == Scope::Local || scope == Scope::Upvlaue)
+    {
+        const char* name = NULL;
+        TiXmlElement* table = new TiXmlElement("table");
+        table->LinkEndChild(WriteXmlNode("type", "table"));
+        int cnt = 0;
+        if (scope == Scope::Local)
+        {
+            for (int local = 1; name = lua_getlocal_dll(api, L, stackEntry, local); ++local)
+            {
+                if (!GetIsInternalVariable(name))
+                {
+                    TiXmlNode* key = new TiXmlElement("key");
+                    TiXmlNode* keyValue = new TiXmlElement("value");
+                    keyValue->LinkEndChild(WriteXmlNode("data", name));
+                    keyValue->LinkEndChild(WriteXmlNode("type", "string"));
+                    key->LinkEndChild(keyValue);
+
+                    TiXmlNode* value = new TiXmlElement("data");
+
+                    value->LinkEndChild(GetValueAsText(api, L, -1));
+                    TiXmlNode* element = new TiXmlElement("element");
+                    element->LinkEndChild(key);
+                    element->LinkEndChild(value);
+                    table->LinkEndChild(element);
+
+                    ++cnt;
+                }
+                lua_pop_dll(api, L, 1);
+            }
+        }
+        else
+        {
+            lua_getinfo_dll(api, L, "fu", stackEntry);
+            int functionIndex = lua_gettop_dll(api, L);
+            for (int upValue = 1; name = lua_getupvalue_dll(api, L, functionIndex, upValue); ++upValue)
+            {
+                // C function up values has no name, so skip those.
+                if (name && *name)
+                {
+                    TiXmlNode* key = new TiXmlElement("key");
+                    TiXmlNode* keyValue = new TiXmlElement("value");
+                    keyValue->LinkEndChild(WriteXmlNode("data", name));
+                    keyValue->LinkEndChild(WriteXmlNode("type", "string"));
+                    key->LinkEndChild(keyValue);
+
+                    TiXmlNode* value = new TiXmlElement("data");
+
+                    value->LinkEndChild(GetValueAsText(api, L, -1));
+                    TiXmlNode* element = new TiXmlElement("element");
+                    element->LinkEndChild(key);
+                    element->LinkEndChild(value);
+                    table->LinkEndChild(element);
+
+                    ++cnt;
+                }
+                lua_pop_dll(api, L, 1);
+            }
+            lua_remove_dll(api, L, functionIndex);
+        }
+
+        if (cnt == 0)
+        {
+            table->SetAttribute("empty", 1);
+        }
+
+        node = table;
+    }
+    else
+    {
+        CopyGlobal(api, L, stackEntry);
+        node = GetValueAsText(api, L, -1);
+        lua_pop_dll(api, L, 1);
+    }
+    return node;
+}
+
 bool DebugBackend::Variable(unsigned long api, lua_State* L, Scope scope, const std::string& expression, int stackLevel, std::string& result)
 {
 	if (!GetIsLuaLoaded())
@@ -2177,145 +2278,81 @@ bool DebugBackend::Variable(unsigned long api, lua_State* L, Scope scope, const 
 	int nilSentinel = lua_gettop_dll(api, L);
 
 	lua_Debug stackEntry = { 0 };
-	const char* name = NULL;
+    TiXmlDocument document;
+    int error = 0;
 
-	if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
-	{
-		lua_pop_dll(api, L, 1);
-		return false;
-	}
-	if (scope == Scope::Local) {
 
-		// Copy the local variables into a new table.
+    if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
+    {
+        lua_pop_dll(api, L, 1);
+        return false;
+    }
+    if (expression.size() != 0)
+    {
+        if (scope == Scope::Local) {
 
-		lua_newtable_dll(api, L);
-		int localTable = lua_gettop_dll(api, L);
+            CopyLocal(api, L, nilSentinel, &stackEntry);
 
-		for (int local = 1; name = lua_getlocal_dll(api, L, &stackEntry, local); ++local)
-		{
-			if (!GetIsInternalVariable(name))
-			{
-				// If the value is nil, we use the nil sentinel so we can differentiate
-				// between undeclared, and declared but set to nil for lexical scoping.
-				if (lua_isnil_dll(api, L, -1))
-				{
-					lua_pop_dll(api, L, 1);
-					lua_pushstring_dll(api, L, name);
-					lua_pushvalue_dll(api, L, nilSentinel);
-				}
-				else
-				{
-					lua_pushstring_dll(api, L, name);
-					lua_insert_dll(api, L, -2);
-				}
-				lua_rawset_dll(api, L, localTable);
-			}
-			else
-			{
-				lua_pop_dll(api, L, 1);
-			}
-		}
+        }
+        else if (scope == Scope::Upvlaue) {
+            CopyUpvalue(api, L, nilSentinel, &stackEntry);
+        }
+        else {
+            CopyGlobal(api, L, &stackEntry);
+        }
+        // Disable the debugger hook so that we don't try to debug the expression.
+        SetHookMode(api, L, HookMode_None);
+        EnableIntercepts(false);
+        int param = lua_gettop_dll(api, L);
+        std::string statement = "local m, n = ...\nlocal value = m" + expression + "\nif value == n then return nil end\nreturn value";
+        error = LoadScriptWithoutIntercept(api, L, statement);
+        if (error == 0) {
+            lua_pushvalue_dll(api, L, param);
+            lua_pushvalue_dll(api, L, nilSentinel);
+            error = lua_pcall_dll(api, L, 2, 1, 0);
+        }
+        if (error != 0) {
+            // The error message will have the form "junk:2: message" so remove the first bit
+            // that isn't useful.
 
-	}
-	else if (scope == Scope::Upvlaue) {
-		// Copy the up values into a new table.
+            const char* wholeMessage = lua_tostring_dll(api, L, -1);
+            const char* errorMessage = strstr(wholeMessage, ":2: ");
 
-		lua_newtable_dll(api, L);
-		int upValueTable = lua_gettop_dll(api, L);
+            if (errorMessage == NULL)
+            {
+                errorMessage = wholeMessage;
+            }
+            else
+            {
+                // Skip over the ":2: " part.
+                errorMessage += 4;
+            }
 
-		// Get the function which is the call stack entry so that we can examine
-		// the up values and get the environment.
-		lua_getinfo_dll(api, L, "fu", &stackEntry);
-		int functionIndex = lua_gettop_dll(api, L);
+            std::string text;
 
-		for (int upValue = 1; name = lua_getupvalue_dll(api, L, functionIndex, upValue); ++upValue)
-		{
-			// C function up values has no name, so skip those.
-			if (name && *name)
-			{
-				// If the value is nil, we use the nil sentinel so we can differentiate
-				// between undeclared, and declared but set to nil for lexical scoping.
-				if (lua_isnil_dll(api, L, -1))
-				{
-					lua_pop_dll(api, L, 1);
-					lua_pushstring_dll(api, L, name);
-					lua_pushvalue_dll(api, L, nilSentinel);
-				}
-				else
-				{
-					lua_pushstring_dll(api, L, name);
-					lua_insert_dll(api, L, -2);
-				}
-				lua_rawset_dll(api, L, upValueTable);
-			}
-			else
-			{
-				lua_pop_dll(api, L, 1);
-			}
-		}
-		lua_remove_dll(api, L, functionIndex);
-	}
-	else {
-		// Get the function which is the call stack entry so that we can examine
-		// the up values and get the environment.
-		lua_getinfo_dll(api, L, "fu", &stackEntry);
-		int functionIndex = lua_gettop_dll(api, L);
+            text = "Error: ";
+            text += errorMessage;
 
-		// Create an environment table that chains all three of the tables together.
-		// They are accessed like this: local -> upvalue -> global
+            document.LinkEndChild(WriteXmlNode("error", text));
+        }
+        else {
+            TiXmlNode* node = GetValueAsText(api, L, -1);
 
-		lua_getfenv_dll(api, L, functionIndex);
-		lua_remove_dll(api, L, functionIndex);
-	}
-	// Disable the debugger hook so that we don't try to debug the expression.
-	SetHookMode(api, L, HookMode_None);
-	EnableIntercepts(false);
-	int param = lua_gettop_dll(api, L);
-	std::string statement = "local m, n = ...\nlocal value = m" + expression + "\nif value == n then return nil end\nreturn value";
-	int error = LoadScriptWithoutIntercept(api, L, statement);
-	if (error == 0) {
-		lua_pushvalue_dll(api, L, param);
-		lua_pushvalue_dll(api, L, nilSentinel);
-		error = lua_pcall_dll(api, L, 2, 1, 0);
-	}
-	TiXmlDocument document;
-	if (error != 0) {
-		// The error message will have the form "junk:2: message" so remove the first bit
-		// that isn't useful.
+            if (node != NULL)
+            {
+                document.LinkEndChild(node);
+            }
+        }
+        // pop result or error msg
+        lua_pop_dll(api, L, 1);
+        // pop scope table
+        lua_pop_dll(api, L, 1);
+    }
+    else
+    {
+        document.LinkEndChild(GetSpecialNode(api, L, scope, stackLevel, &stackEntry));
+    }
 
-		const char* wholeMessage = lua_tostring_dll(api, L, -1);
-		const char* errorMessage = strstr(wholeMessage, ":2: ");
-
-		if (errorMessage == NULL)
-		{
-			errorMessage = wholeMessage;
-		}
-		else
-		{
-			// Skip over the ":2: " part.
-			errorMessage += 4;
-		}
-
-		std::string text;
-
-		text = "Error: ";
-		text += errorMessage;
-
-		document.LinkEndChild(WriteXmlNode("error", text));
-	}
-	else {
-		TiXmlNode* node = GetValueAsText(api, L, -1);
-
-		if (node != NULL)
-		{
-			document.LinkEndChild(node);
-		}
-	}
-
-	// pop result or error msg
-	lua_pop_dll(api, L, 1);
-	// pop scope table
-	lua_pop_dll(api, L, 1);
 
 	TiXmlPrinter printer;
 	printer.SetIndent("\t");

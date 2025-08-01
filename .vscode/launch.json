@@ -35,6 +35,7 @@
 			"request": "attach",
 			"name": "Debug Adapter",
 			"address": "127.0.0.1:4908",
+			"stopOnEntry": false
 		}
 	]
 }

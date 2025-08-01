@@ -1,5 +1,8 @@
 # Change Log
 
+### 1.1.1
+修复Local和Upvalue在某些情况无法查看的bug  
+优化Local和Upvalue，保持原本的顺序
 ### 1.1.0
 增加attach功能    
 修改logo     
