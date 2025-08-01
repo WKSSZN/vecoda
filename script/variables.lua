@@ -123,7 +123,7 @@ function m.scopes(frameId)
     for i, scope in ipairs(scopes) do
         result[i] = {
             name = scope,
-            variablesReference = m.createVariable(scope, scope, 1, frameId),
+            variablesReference = m.createVariable(scope, scope, frameId, 1),
             expensive = false,
         }
     end
