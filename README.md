@@ -4,13 +4,14 @@
 
 ## Features
 
-Launch
-断点
-stepin
-stepover
-stepout
-异常捕捉
-变量查看
+Launch  
+Attach  
+断点  
+stepin  
+stepover  
+stepout  
+异常捕捉/筛选  
+变量查看  
 
 ## Requirements
 
@@ -20,12 +21,55 @@ stepout
 项目目录里没有.vscode/launch.json的话就按Ctrl+Shift+D打开debug pannel，Run and Debug下面有一行小字可以创建launch.json,
 点击之后会让选一个模板，就选Lua Debug，选完就创建好了
 ### 需要配置的参数
+#### Launch
+"`rqeuest`"="launch"  
 `runtimeExecutable`: 可执行程序的路径  
 `cwd`: 工作目录，和decoda一个含义  
 `arg`: 程序启动的时候给的命令行参数  
 `name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的程序，可以取不同的名字区分开来
 
+#### Attach
+"`rqeuest`"="attach"  
+`cwd`: 工作目录，和decoda一个含义  
+`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的
+
+attach模式启动后需要手动选择进程  
+不同进程的attach配置可能是一样的，建议取不同的`name`，这样同时attach的时候，就可以用名字区分开来了。
+
 配置目录的时候可以用`{$workspaceFolder}`变量来代表vscode打开的工作目录
+
+#### 参考配置
+`.vscode\launch.json`
+```json
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lua",
+            "name": "Debug MainServ",
+            "request": "launch",
+            "cwd": "${workspaceFolder}\\Server",
+            "runtimeExecutable": "${workspaceFolder}\\Server\\main.exe",
+            "arg": "-n MainServ -f"
+        },
+        {
+            "type": "lua",
+            "name": "AttachMainServ",
+            "request": "attach",
+            "cwd": "${workspaceFolder}\\Server"
+        },
+        {//配置和上面只有name不一样，用来做区分
+            "type": "lua",
+            "name": "AttachDBServ",
+            "request": "attach",
+            "cwd": "${workspaceFolder}\\Server"
+        }
+    ]
+}
+```
 
 ## 用到的第三方代码
 [decoda](https://github.com/unknownworlds/decoda)  
