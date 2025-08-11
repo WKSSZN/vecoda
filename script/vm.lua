@@ -18,7 +18,7 @@ end
 
 function m.newThread(vm)
     threads[#threads + 1] = {
-        name = string.format("Thread (%u)", vm),
+        name = string.format("Thread(0x%08x)", vm),
         id = vm
     }
     message.event('thread', {
