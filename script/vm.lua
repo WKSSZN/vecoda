@@ -8,6 +8,7 @@ local message
 
 local threads = {}
 local stackTrace = {}
+local curThread
 
 function m.init(msg)
     message = msg
@@ -43,15 +44,26 @@ function m.setStacks(stacks)
     stackTrace = stacks
 end
 
-function m.getStackTrace()
-    return {
-        totalFrames = #stackTrace,
-        stackFrames = stackTrace
-    }
+function m.getStackTrace(threadId)
+    if threadId == curThread then
+        return {
+            totalFrames = #stackTrace,
+            stackFrames = stackTrace
+        }
+    else
+        return {
+            totalFrames = 0,
+            stackFrames = {}
+        }
+    end
 end
 
 function m.threads()
     return threads
+end
+
+function m.setCurThread(threadId)
+    curThread = threadId
 end
 
 return m

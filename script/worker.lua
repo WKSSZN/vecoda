@@ -130,6 +130,7 @@ function m.update(msg)
         return
     end
     local nvm = assert(debugdata.EventChannel:ReadUInt32())
+    vm.setCurThread(nvm)
     if eventId == launcher.EventId_LoadScript then
         local name = debugdata.EventChannel:ReadString()
         local source = debugdata.EventChannel:ReadString()

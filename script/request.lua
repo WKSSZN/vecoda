@@ -93,7 +93,7 @@ function handlers.setExceptionBreakpoints(req)
 end
 
 function handlers.stackTrace(req)
-    message.success(req, vm.getStackTrace())
+    message.success(req, vm.getStackTrace(req.arguments.threadId))
 end
 
 function handlers.scopes(req)
