@@ -129,29 +129,16 @@ public:
      * method returns false and the error message is stored in the result.
      */
     bool Evaluate(unsigned long api, lua_State* L, const std::string& expression, int stackLevel, std::string& result);
-	bool Variable(unsigned long api, lua_State* L, Scope scope, const std::string& expression, int stackLevel, std::string& result);
     void CopyLocal(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry);
     void CopyUpvalue(unsigned long api, lua_State* L, int nilSentinel, lua_Debug* stackEntry);
     void CopyGlobal(unsigned long api, lua_State* L, lua_Debug* stackEntry);
-    TiXmlNode* GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel, lua_Debug* stackEntry);
-
-    /**
-     * Evalates the expression. If there was an error evaluating the expression the
-     * method returns false and the error message is stored in the result.
-     */
-    int ProtectedEvaluate(lua_State* L);
-
-    /**
-     * Evalates the expression. If there was an error evaluating the expression the
-     * method returns false and the error message is stored in the result.
-     */
-    static int StaticProtectedEvaluate(lua_State* L);
-
-    /**
-     * Gets the value of a variable. The variable can include member selection.
-     */
-    TiXmlNode* GetValue(unsigned long api, lua_State* L, const std::string& variable, unsigned int scriptIndex,
-        unsigned int line);
+    // iterates table with given reference
+    bool ExpandTable(unsigned long api, lua_State* L, int stackLevel, Scope scope, int reference, std::string& result);
+    // get the cach table of tables
+    void GetRegistryRefTable(unsigned long api, lua_State* L);
+    int CacheTable(unsigned long api, lua_State* L, int table);
+    void ClearCache(unsigned long api, lua_State* L);
+    TiXmlNode* GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel);
 
     /**
      * Toggles a breakpoint on the line on or off.
@@ -337,19 +324,19 @@ private:
      * Gets the value at location n on the stack as text. If expandTable is true
      * then tables will be returned in their expanded form (i.e. "{ ... }")
      */
-    TiXmlNode* GetValueAsText(unsigned long api, lua_State* L, int n, int maxDepth = 2, const char* typeNameOverride = NULL, bool displayAsKey = false) const;
+    TiXmlNode* GetValueAsText(unsigned long api, lua_State* L, int n, int maxDepth = 2, const char* typeNameOverride = NULL, bool displayAsKey = false);
 
     /**
      * Gets the value at location n on the stack as text. If expandTable is true
      * then tables will be returned in their expanded form (i.e. "{ ... }")
      */
-    TiXmlNode* GetLuaBindClassValue(unsigned long api, lua_State* L, unsigned int maxDepth, bool displayAsKey = false) const;
+    TiXmlNode* GetLuaBindClassValue(unsigned long api, lua_State* L, unsigned int maxDepth, bool displayAsKey = false);
 
     /**
      * Gets the table value at location n on the stack as text. Nested tables are
      * not expanded.
      */
-    TiXmlNode* GetTableAsText(unsigned long api, lua_State* L, int t, int maxDepth = 10, const char* typeNameOverride = NULL) const;
+    TiXmlNode* GetTableAsText(unsigned long api, lua_State* L, int t, int maxDepth = 10, const char* typeNameOverride = NULL);
 
     /**
      * Returns true if the name belongs to a Lua internal variable that we
@@ -619,6 +606,8 @@ private:
     mutable bool                    m_warnedAboutUserData;
 	lua_State*						m_breakingState;
 
+    int                             m_refPos;
+    int                             m_tableCachePos;
 };
 
 #endif

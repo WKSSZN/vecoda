@@ -60,7 +60,7 @@ enum CommandId
     CommandId_ToggleBreakpoint  = 4,    // Toggles a breakpoint on a line on and off.
     CommandId_Break             = 5,    // Instructs the debugger to break on the next line of script code.
     CommandId_Evaluate          = 6,    // Evaluates the value of an expression in the current context.
-	CommandId_Variable          = 7,    // Get variables from locals, upvalues and globals.
+	CommandId_ExpandTable       = 7,    // expands table by given reference.
     CommandId_Detach            = 8,    // Detaches the debugger from the process.
     CommandId_PatchReplaceLine  = 9,    // Replaces a line of code with a new line.
     CommandId_PatchInsertLine   = 10,   // Adds a new line of code.
@@ -73,6 +73,7 @@ enum CommandId
 
 enum Scope
 {
+    None = 0,
 	Local = 1,
 	Upvlaue = 2,
 	Global = 3

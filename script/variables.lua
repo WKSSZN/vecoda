@@ -8,7 +8,7 @@ local id = 0
 
 local function getId()
     id = id + 1
-    return id
+    return id << 16
 end
 
 event.on('stopped', function()
@@ -26,7 +26,7 @@ local getVariable = function(reference)
     return variables[reference]
 end
 
-local function parseVariable(root, prefix, frameId, t)
+local function parseVariable(root, frameId)
     local values = {}
     local name = root:name()
     if name ~= 'table' then
@@ -48,12 +48,11 @@ local function parseVariable(root, prefix, frameId, t)
                 variable.value = '{}'
             else
                 variable.value = 'table'
-                if keytype == 'number' then
-                    strkey = strkey
-                else
-                    strkey = "." .. strkey
-                end
-                variable.variablesReference = m.createVariable(strkey, ("%s%s"):format(prefix, strkey), frameId, t)
+                variable.variablesReference = m.createVariable {
+                    reference = tonumber(valueel['@reference']),
+                    type = 'table',
+                    frameId = frameId
+                }
             end
         elseif valueel:name() == 'function' then
             variable.value = "function"
@@ -84,33 +83,18 @@ function m.variables(reference)
     local scopedVariables = {}
     if not variable then return end
     if not variable.value then
-        local success, root, noSort
-        if variable.type == 2 then
-            success, root = event.emit('evaluate', variable.expression, variable.frameId)
-        else
-            local scope, expression = variable.expression:match '(%([^%)]+%))([^$]*)'
-            if not scope then
-                message.output('stderr', "unknow variable:" .. variable.expression)
-            end
-            local nscope
-            for i, ssope in ipairs(scopes) do
-                if ssope == scope then
-                    nscope = i
-                    break
-                end
-            end
-            success, root = event.emit('variable', nscope, expression, variable.frameId)
-            if nscope and scope == variable.expression then
-                noSort = true
-            end
-        end
+        local success, root
+        success, root = event.emit("expand", variable.scope or 0, variable.frameId, variable.reference or 0)
         if not success then
             return {
-                error = { format = root, id = 3 }
+                error = {
+                    id = 0,
+                    format = root
+                }
             }
         end
-        local values = parseVariable(root.___children[1], variable.expression, variable.frameId, variable.type)
-        if not noSort then
+        local values = parseVariable(root.___children[1], variable.frameId)
+        if not variable.scope then
             table.sort(values, function(a, b)
                 return a.name < b.name
             end)
@@ -128,7 +112,10 @@ function m.scopes(frameId)
     for i, scope in ipairs(scopes) do
         result[i] = {
             name = scope,
-            variablesReference = m.createVariable(scope, scope, frameId, 1),
+            variablesReference = m.createVariable {
+                scope = i,
+                frameId = frameId
+            },
             expensive = false,
         }
     end
@@ -151,20 +138,20 @@ function m.evaluate(expression, frameId)
         root = root.___children[1].___children[1]
     end
     if root.___children[1]:name() == 'table' then
-        local arrv = parseVariable(root.___children[1], ("(%s)"):format(expression), frameId, 2)
-        if #arrv > 0 then
-            table.sort(arrv, function(a, b)
-                return a.name < b.name
-            end)
+        local tableEl = root.___children[1]
+        if tableEl["@empty"] then
             return {
-                result = 'table',
-                type = "table",
-                variablesReference = m.createVariable(expression, ("(%s)"):format(expression), frameId, 2, arrv)
+                result = "{}",
+                type = "table"
             }
         else
             return {
-                result = '{}',
-                type = 'table',
+                result = "table",
+                type = "table",
+                variablesReference = m.createVariable {
+                    reference = tonumber(tableEl["@reference"]),
+                    frameId = frameId
+                }
             }
         end
     elseif root.___children[1]:name() == 'value' then
@@ -201,17 +188,12 @@ function m.evaluate(expression, frameId)
     }
 end
 
-function m.createVariable(name, expression, frameId, type, value)
-    local reference = getId()
-    variables[reference] = {
-        name = name,
-        value = value,
-        variablesReference = reference,
-        expression = expression,
-        frameId = frameId,
-        type = type
-    }
-    return reference
+function m.createVariable(var)
+    if not var.reference then
+        var.reference = getId()
+    end
+    variables[var.reference] = var
+    return var.reference
 end
 
 function m.init(msg)

@@ -443,7 +443,7 @@ int DebugBackend::PostLoadScript(unsigned long api, int result, lua_State* L, co
 
         // Wait for the front-end to tell use to continue.
         WaitForContinue();
-
+        ClearCache(api, L);
     }
     /*
     else
@@ -1136,15 +1136,15 @@ void DebugBackend::CommandThreadProc()
 
                 }
                 break;
-			case CommandId_Variable:
+			case CommandId_ExpandTable:
 				{
 					unsigned int scope;
 					m_commandChannel.ReadUInt32(scope);
-					std::string expression;
-					m_commandChannel.ReadString(expression);
 
 					unsigned int stackLevel;
 					m_commandChannel.ReadUInt32(stackLevel);
+                    unsigned int reference;
+                    m_commandChannel.ReadUInt32(reference);
 
 					unsigned long api = GetApiForVm(L);
 
@@ -1153,7 +1153,7 @@ void DebugBackend::CommandThreadProc()
 
 					if (api != -1)
 					{
-						success = Variable(api, L, static_cast<Scope>(scope), expression, stackLevel, result);
+                        success = ExpandTable(api, L, stackLevel, static_cast<Scope>(scope), reference, result);
 					}
 
 					m_commandChannel.WriteUInt32(success);
@@ -1475,7 +1475,8 @@ void DebugBackend::BreakFromScript(unsigned long api, lua_State* L, BreakReason 
     CriticalSectionLock lock(m_breakLock);
 
     SendBreakEvent(api, L, reason);
-    WaitForContinue();        
+    WaitForContinue();
+    ClearCache(api, L);
 }
 
 int DebugBackend::Call(unsigned long api, lua_State* L, int nargs, int nresults, int errorfunc)
@@ -1572,6 +1573,7 @@ int DebugBackend::ErrorHandler(unsigned long api, lua_State* L)
             SendExceptionEvent(L, message);
             SendBreakEvent(api, L, BreakReason::Exception, 1);
             WaitForContinue();
+            ClearCache(api, L);
         } 
         else 
         {
@@ -1727,6 +1729,151 @@ void DebugBackend::CopyGlobal(unsigned long api, lua_State* L, lua_Debug* stackE
     int functionIndex = lua_gettop_dll(api, L);
     lua_getfenv_dll(api, L, functionIndex);
     lua_remove_dll(api, L, functionIndex);
+}
+
+bool DebugBackend::ExpandTable(unsigned long api, lua_State* L, int stackLevel, Scope scope, int reference, std::string& result)
+{
+    if (!GetIsLuaLoaded())
+    {
+        return false;
+    }
+
+    // Adjust the desired stack level based on the number of stack levels we skipped when
+    // we sent the front end the call stack.
+
+    {
+
+        CriticalSectionLock lock(m_criticalSection);
+
+        StateToVmMap::iterator stateIterator = m_stateToVm.find(L);
+        assert(stateIterator != m_stateToVm.end());
+
+        if (stateIterator != m_stateToVm.end())
+        {
+            stackLevel += stateIterator->second->stackTop;
+        }
+
+    }
+
+    // Disable the debugger hook so that we don't try to debug the expression.
+    SetHookMode(api, L, HookMode_None);
+    EnableIntercepts(false);
+    TiXmlDocument document;
+    bool error = false;
+    if (scope == Scope::None)
+    {
+        GetRegistryRefTable(api, L);
+        lua_rawgeti_dll(api, L, -1, reference);
+        if (lua_type_dll(api, L, -1) != LUA_TTABLE)
+        {
+            result = "unknow reference";
+            error = true;
+        }
+        else
+        {
+            document.LinkEndChild(GetValueAsText(api, L, -1));
+        }
+    }
+    else
+    {
+        document.LinkEndChild(GetSpecialNode(api, L, scope, stackLevel));
+    }
+    EnableIntercepts(true);
+    SetHookMode(api, L, HookMode_Full);
+    TiXmlPrinter printer;
+    document.Accept(&printer);
+    result = printer.CStr();
+    return true;
+}
+
+void DebugBackend::GetRegistryRefTable(unsigned long api, lua_State* L)
+{
+    lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_refPos));
+    lua_rawget_dll(api, L, GetRegistryIndex(api));
+    if (lua_isnil_dll(api, L, -1))
+    {
+        lua_pop_dll(api, L, 1);
+        lua_newtable_dll(api, L);
+    }
+}
+
+int DebugBackend::CacheTable(unsigned long api, lua_State* L, int table)
+{
+    int t1 = lua_gettop_dll(api, L);
+    table = lua_absindex_dll(api, L, table);
+    lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_tableCachePos));
+    lua_rawget_dll(api, L, GetRegistryIndex(api));
+    if (lua_isnil_dll(api, L, -1))
+    {
+        lua_pop_dll(api, L, 1);
+        lua_newtable_dll(api, L);
+        lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_tableCachePos));
+        lua_pushvalue_dll(api, L, -2);
+        lua_rawset_dll(api, L, GetRegistryIndex(api));
+        lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_refPos));
+        lua_newtable_dll(api, L);
+        lua_rawset_dll(api, L, GetRegistryIndex(api));
+    } // 1
+    int cache = lua_gettop_dll(api, L);
+    int ref;
+    lua_pushvalue_dll(api, L, table);
+    lua_rawget_dll(api, L, cache); // 2
+    if (lua_isnil_dll(api, L, -1))
+    {
+        lua_pushlightuserdata_dll(api, L, (void*)&m_refPos);
+        lua_rawget_dll(api, L, GetRegistryIndex(api)); // 3
+        int type = lua_type_dll(api, L, -1);
+        lua_pushvalue_dll(api, L, table);
+        ref = luaL_ref_dll(api, L, -2);
+
+        lua_pushvalue_dll(api, L, table);
+        lua_pushinteger_dll(api, L, ref);
+        lua_rawset_dll(api, L, cache);
+
+        lua_pop_dll(api, L, 1); // 2 pop ref table
+    }
+    else
+    {
+        ref = lua_tonumber_dll(api, L, -1);
+    }
+    lua_pop_dll(api, L, 2); // pop table ref and cache table
+
+    int t2 = lua_gettop_dll(api, L);
+    assert(t1 == t2);
+    return ref;
+}
+
+void DebugBackend::ClearCache(unsigned long api, lua_State* L)
+{
+    lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_refPos));
+    lua_rawget_dll(api, L, GetRegistryIndex(api));
+    int ref = lua_gettop_dll(api, L);
+    if (!lua_isnil_dll(api, L, ref))
+    {
+        std::vector<int> refs;
+        lua_pushnil_dll(api, L);
+        while (lua_next_dll(api, L, ref))
+        {
+            refs.push_back(static_cast<int>(lua_tonumber_dll(api, L, -2)));
+            lua_pop_dll(api, L, 1);
+        }
+        for (size_t i = 0; i < refs.size(); i++)
+        {
+            luaL_unref_dll(api, L, ref, refs[i]);
+        }
+        lua_pop_dll(api, L, 1);
+        lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_refPos));
+        lua_pushnil_dll(api, L);
+        lua_rawset_dll(api, L, GetRegistryIndex(api));
+
+        lua_pushlightuserdata_dll(api, L, static_cast<void*>(&m_tableCachePos));
+        lua_pushnil_dll(api, L);
+        lua_rawset_dll(api, L, GetRegistryIndex(api));
+    }
+    else
+    {
+        lua_pop_dll(api, L, 1);
+    }
 }
 
 bool DebugBackend::CreateEnvironment(unsigned long api, lua_State* L, int stackLevel, int nilSentinel)
@@ -2093,7 +2240,7 @@ bool DebugBackend::Evaluate(unsigned long api, lua_State* L, const std::string& 
         for (int i = 0; i < nresults; ++i)
         {
 
-            TiXmlNode* node = GetValueAsText(api, L, -1 - (nresults - 1 - i));
+            TiXmlNode* node = GetValueAsText(api, L, -1 - (nresults - 1 - i), 1);
 
             if (node != NULL)
             {
@@ -2168,8 +2315,15 @@ bool DebugBackend::Evaluate(unsigned long api, lua_State* L, const std::string& 
 }
 
 
-TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel, lua_Debug* stackEntry)
+TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope scope, int stackLevel)
 {
+
+    lua_Debug stackEntry = { 0 };
+
+    if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
+    {
+        return nullptr;
+    }
     TiXmlNode* node;
     if (scope == Scope::Local || scope == Scope::Upvlaue)
     {
@@ -2179,7 +2333,7 @@ TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope s
         int cnt = 0;
         if (scope == Scope::Local)
         {
-            for (int local = 1; name = lua_getlocal_dll(api, L, stackEntry, local); ++local)
+            for (int local = 1; name = lua_getlocal_dll(api, L, &stackEntry, local); ++local)
             {
                 if (!GetIsInternalVariable(name))
                 {
@@ -2191,7 +2345,7 @@ TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope s
 
                     TiXmlNode* value = new TiXmlElement("data");
 
-                    value->LinkEndChild(GetValueAsText(api, L, -1));
+                    value->LinkEndChild(GetValueAsText(api, L, -1, 1));
                     TiXmlNode* element = new TiXmlElement("element");
                     element->LinkEndChild(key);
                     element->LinkEndChild(value);
@@ -2204,7 +2358,7 @@ TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope s
         }
         else
         {
-            lua_getinfo_dll(api, L, "fu", stackEntry);
+            lua_getinfo_dll(api, L, "fu", &stackEntry);
             int functionIndex = lua_gettop_dll(api, L);
             for (int upValue = 1; name = lua_getupvalue_dll(api, L, functionIndex, upValue); ++upValue)
             {
@@ -2219,7 +2373,7 @@ TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope s
 
                     TiXmlNode* value = new TiXmlElement("data");
 
-                    value->LinkEndChild(GetValueAsText(api, L, -1));
+                    value->LinkEndChild(GetValueAsText(api, L, -1, 1));
                     TiXmlNode* element = new TiXmlElement("element");
                     element->LinkEndChild(key);
                     element->LinkEndChild(value);
@@ -2241,137 +2395,11 @@ TiXmlNode* DebugBackend::GetSpecialNode(unsigned long api, lua_State* L, Scope s
     }
     else
     {
-        CopyGlobal(api, L, stackEntry);
+        CopyGlobal(api, L, &stackEntry);
         node = GetValueAsText(api, L, -1);
         lua_pop_dll(api, L, 1);
     }
     return node;
-}
-
-bool DebugBackend::Variable(unsigned long api, lua_State* L, Scope scope, const std::string& expression, int stackLevel, std::string& result)
-{
-	if (!GetIsLuaLoaded())
-	{
-		return false;
-	}
-
-	// Adjust the desired stack level based on the number of stack levels we skipped when
-	// we sent the front end the call stack.
-
-	{
-
-		CriticalSectionLock lock(m_criticalSection);
-
-		StateToVmMap::iterator stateIterator = m_stateToVm.find(L);
-		assert(stateIterator != m_stateToVm.end());
-
-		if (stateIterator != m_stateToVm.end())
-		{
-			stackLevel += stateIterator->second->stackTop;
-		}
-
-	}
-
-	int t1 = lua_gettop_dll(api, L);
-
-	lua_newuserdata_dll(api, L, 0);
-	int nilSentinel = lua_gettop_dll(api, L);
-
-	lua_Debug stackEntry = { 0 };
-    TiXmlDocument document;
-    int error = 0;
-
-
-    if (lua_getstack_dll(api, L, stackLevel, &stackEntry) != 1)
-    {
-        lua_pop_dll(api, L, 1);
-        return false;
-    }
-    if (expression.size() != 0)
-    {
-        if (scope == Scope::Local) {
-
-            CopyLocal(api, L, nilSentinel, &stackEntry);
-
-        }
-        else if (scope == Scope::Upvlaue) {
-            CopyUpvalue(api, L, nilSentinel, &stackEntry);
-        }
-        else {
-            CopyGlobal(api, L, &stackEntry);
-        }
-        // Disable the debugger hook so that we don't try to debug the expression.
-        SetHookMode(api, L, HookMode_None);
-        EnableIntercepts(false);
-        int param = lua_gettop_dll(api, L);
-        std::string statement = "local m, n = ...\nlocal value = m" + expression + "\nif value == n then return nil end\nreturn value";
-        error = LoadScriptWithoutIntercept(api, L, statement);
-        if (error == 0) {
-            lua_pushvalue_dll(api, L, param);
-            lua_pushvalue_dll(api, L, nilSentinel);
-            error = lua_pcall_dll(api, L, 2, 1, 0);
-        }
-        if (error != 0) {
-            // The error message will have the form "junk:2: message" so remove the first bit
-            // that isn't useful.
-
-            const char* wholeMessage = lua_tostring_dll(api, L, -1);
-            const char* errorMessage = strstr(wholeMessage, ":2: ");
-
-            if (errorMessage == NULL)
-            {
-                errorMessage = wholeMessage;
-            }
-            else
-            {
-                // Skip over the ":2: " part.
-                errorMessage += 4;
-            }
-
-            std::string text;
-
-            text = "Error: ";
-            text += errorMessage;
-
-            document.LinkEndChild(WriteXmlNode("error", text));
-        }
-        else {
-            TiXmlNode* node = GetValueAsText(api, L, -1);
-
-            if (node != NULL)
-            {
-                document.LinkEndChild(node);
-            }
-        }
-        // pop result or error msg
-        lua_pop_dll(api, L, 1);
-        // pop scope table
-        lua_pop_dll(api, L, 1);
-    }
-    else
-    {
-        document.LinkEndChild(GetSpecialNode(api, L, scope, stackLevel, &stackEntry));
-    }
-
-
-	TiXmlPrinter printer;
-	printer.SetIndent("\t");
-
-	document.Accept(&printer);
-	result = printer.Str();
-
-	// Reenable the debugger hook
-	EnableIntercepts(true);
-	SetHookMode(api, L, HookMode_Full);
-	if (GetVm(L)->haveActiveBreakpoints || m_mode == Mode_StepInto || m_mode == Mode_StepOver){
-	}
-
-	// pop fake nil
-	lua_pop_dll(api, L, 1);
-	int t2 = lua_gettop_dll(api, L);
-	assert(t1 == t2);
-
-	return error == 0;
 }
 
 bool DebugBackend::CallMetaMethod(unsigned long api, lua_State* L, int valueIndex, const char* method, int numResults, int& result) const
@@ -2457,7 +2485,7 @@ void DebugBackend::MergeTables(unsigned long api, lua_State* L, unsigned int tab
 
 }
 
-TiXmlNode* DebugBackend::GetLuaBindClassValue(unsigned long api, lua_State* L, unsigned int maxDepth, bool displayAsKey) const
+TiXmlNode* DebugBackend::GetLuaBindClassValue(unsigned long api, lua_State* L, unsigned int maxDepth, bool displayAsKey)
 {
 
     if (!lua_checkstack_dll(api, L, 3))
@@ -2519,7 +2547,7 @@ TiXmlNode* DebugBackend::GetLuaBindClassValue(unsigned long api, lua_State* L, u
 
 }
 
-TiXmlNode* DebugBackend::GetValueAsText(unsigned long api, lua_State* L, int n, int maxDepth, const char* typeNameOverride, bool displayAsKey) const
+TiXmlNode* DebugBackend::GetValueAsText(unsigned long api, lua_State* L, int n, int maxDepth, const char* typeNameOverride, bool displayAsKey)
 {
 
     int t1 = lua_gettop_dll(api, L);
@@ -2544,38 +2572,7 @@ TiXmlNode* DebugBackend::GetValueAsText(unsigned long api, lua_State* L, int n, 
 
     if (strcmp(typeName, "table") == 0)
     {
-        int stackStart = lua_gettop_dll(api, L);
-        int result = 0;
-        std::string className;
-        if (CallMetaMethod(api, L, stackStart, "__towatch", LUA_MULTRET, result))
-        {
-            if (result == 0)
-            {
-                int numResults = lua_gettop_dll(api, L) - stackStart;
-
-                if( numResults == 0)
-                {
-                    lua_pushnil_dll( api, L);
-                    numResults = 1;
-                }
-                else if (numResults > 1)
-                {
-                    // First result is the class name if multiple results are 
-                    // returned.
-                    className = lua_tostring_dll(api, L, -numResults);
-                }
-
-                node = GetValueAsText(api, L, -1, maxDepth, className.c_str(), displayAsKey);
-
-                // Remove the table value.
-                lua_pop_dll(api, L, numResults);
-
-            }
-        }
-        if( node == NULL)
-        {
         node = GetTableAsText(api, L, -1, maxDepth - 1, typeNameOverride);
-        }
         // Remove the duplicated value.
         lua_pop_dll(api, L, 1);
     }
@@ -2594,38 +2591,7 @@ TiXmlNode* DebugBackend::GetValueAsText(unsigned long api, lua_State* L, int n, 
     }
     else
     {
-        if (strcmp(typeName, "wstring") == 0)
-        {
-
-            size_t length = 0;
-            const lua_WChar* string = lua_towstring_dll(api, L, -1); 
-            
-            if (string != NULL)
-            {
-                length = wcslen(reinterpret_cast<const wchar_t*>(string)) * sizeof(lua_WChar);
-            }
-
-            std::string text;
-            bool wide;
-
-            if (!displayAsKey)
-            {
-                text += "L\"";
-            }
-            
-            text += GetAsciiString(string, length, wide, true);
-            
-            if (!displayAsKey)
-            {
-                text += "\"";
-            }
-
-            node = new TiXmlElement("value");
-            node->LinkEndChild( WriteXmlNode("data", text) );
-            node->LinkEndChild( WriteXmlNode("type", typeNameOverride) );
-
-        }
-        else if (strcmp(typeName, "string") == 0)
+        if (strcmp(typeName, "string") == 0)
         {
 
             size_t length;
@@ -2848,7 +2814,7 @@ TiXmlNode* DebugBackend::GetValueAsText(unsigned long api, lua_State* L, int n, 
 
 }
 
-TiXmlNode* DebugBackend::GetTableAsText(unsigned long api, lua_State* L, int t, int maxDepth, const char* typeNameOverride) const
+TiXmlNode* DebugBackend::GetTableAsText(unsigned long api, lua_State* L, int t, int maxDepth, const char* typeNameOverride)
 {
 
     if (!lua_checkstack_dll(api, L, 2))
@@ -2898,6 +2864,11 @@ TiXmlNode* DebugBackend::GetTableAsText(unsigned long api, lua_State* L, int t, 
     lua_pushnil_dll(api, L);
     if (lua_next_dll(api, L, t) != 0) {
         lua_pop_dll(api, L, 2);
+        if (maxDepth <= 0)
+        {
+            int reference = CacheTable(api, L, t);
+            node->SetAttribute("reference", reference);
+        }
     }
     else
     {

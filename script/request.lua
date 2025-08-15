@@ -101,9 +101,14 @@ function handlers.scopes(req)
 end
 
 function handlers.variables(req)
-    message.success(req, {
-        variables = variables.variables(req.arguments.variablesReference) or {}
-    })
+    local ret = variables.variables(req.arguments.variablesReference)
+    if ret.error then
+        message.error(req, ret)
+    else
+        message.success(req, {
+            variables = ret
+        })
+    end
 end
 
 function handlers.evaluate(req)
