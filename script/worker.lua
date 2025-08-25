@@ -238,4 +238,10 @@ function m.continue()
     })
 end
 
+function m.pause(arg)
+    if not debugdata then return end
+    debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Break)
+    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+end
+
 return m
