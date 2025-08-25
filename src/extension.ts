@@ -47,19 +47,19 @@ class DescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
 /**
  * supportsConfigurationDoneRequest
  * supportsFunctionBreakpoints
- * supportsConditionalBreakpoints 先不做
- * supportsHitConditionalBreakpoints 先不做
+ * supportsConditionalBreakpoints
+ * supportsHitConditionalBreakpoints
  * supportsEvaluateForHovers
- * supportsRestartRequest
+ * supportsRestartRequest -- 有bug先不用
  * supportsExceptionInfoRequest
  * supportTerminateDebuggee
- * supportsDelayedStackTraceLoading
- * supportsLoadedSourcesRequest
- * supportsLogPoints 先不做
+ * supportsDelayedStackTraceLoading -- 先不做
+ * supportsLoadedSourcesRequest -- 先不用Source机制
+ * supportsLogPoints
  * setExpression
  * supportsTerminateRequest
- * supportsClipboardContext
- * supportsExceptionFilterOptions 先不做
+ * supportsClipboardContext 还没做
+ * supportsExceptionFilterOptions
  */
 
 
