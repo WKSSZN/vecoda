@@ -140,12 +140,12 @@ void DebugBackend::Destroy()
 DebugBackend::DebugBackend()
 {
     m_commandThread         = NULL;
-    m_stepEvent             = NULL;
     m_loadEvent             = NULL;
     m_detachEvent           = NULL;
-    m_mode                  = Mode_Continue;
     m_log                   = NULL;
     m_warnedAboutUserData   = false;
+    m_refPos                = 0;
+    m_tableCachePos         = 0;
 }
 
 DebugBackend::~DebugBackend()
@@ -170,12 +170,6 @@ DebugBackend::~DebugBackend()
     {
         CloseHandle(m_commandThread);
         m_commandThread = NULL;
-    }
-
-    if (m_stepEvent != NULL)
-    {
-        CloseHandle(m_stepEvent);
-        m_stepEvent = NULL;
     }
 
     if (m_loadEvent != NULL)
@@ -222,7 +216,6 @@ bool DebugBackend::Initialize(HINSTANCE hInstance)
 {
 
     DWORD processId = GetCurrentProcessId();
-	m_breakingState = nullptr;
     char eventChannelName[256];
     _snprintf(eventChannelName, 256, "Vecoda.Event.%x", processId);
 
@@ -242,10 +235,6 @@ bool DebugBackend::Initialize(HINSTANCE hInstance)
     {
         return false;
     }
-
-    // Create the event used to signal when we should stop "breaking"
-    // and step to the next line.
-    m_stepEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
     // Create the event used to signal when the frontend is finished processing
     // the load of a script.w
@@ -307,6 +296,8 @@ DebugBackend::VirtualMachine* DebugBackend::AttachState(unsigned long api, lua_S
     vm->luaJitWorkAround    = false;
     vm->breakpointInStack   = true;// Force the stack tobe checked when the first script is entered
 	vm->haveActiveBreakpoints = hasBreakPoint;
+    vm->mode                = Mode::Mode_Continue;
+    vm->break_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     
     m_vms.push_back(vm);
     m_stateToVm.insert(std::make_pair(L, vm));
@@ -394,6 +385,7 @@ void DebugBackend::DetachState(unsigned long api, lua_State* L)
         if (vm->L == L)
         {
             CloseHandle(vm->hThread);
+            CloseHandle(vm->break_event);
             delete vm;
             m_vms.erase(m_vms.begin() + i);
         }
@@ -442,7 +434,7 @@ int DebugBackend::PostLoadScript(unsigned long api, int result, lua_State* L, co
         }
 
         // Wait for the front-end to tell use to continue.
-        WaitForContinue();
+        WaitForContinue(m_stateToVm.find(L)->second);
         ClearCache(api, L);
     }
     /*
@@ -758,7 +750,7 @@ void DebugBackend::HookCallback(unsigned long api, lua_State* L, lua_Debug* ar)
     //LogHookEvent(api, L, ar);
 
     //Only try to downgrade the hook when the debugger is not stepping   
-    if(m_mode == Mode_Continue)
+    if(vm->mode == Mode_Continue)
     {
         UpdateHookMode(api, L, ar);
     }
@@ -805,7 +797,7 @@ void DebugBackend::HookCallback(unsigned long api, lua_State* L, lua_Debug* ar)
             
             // If we're stepping on each line or we just stepped out of a function that
             // we were stepping over, break.
-            if (m_mode == Mode_StepOver && vm->callStackDepth > 0)
+            if (vm->mode == Mode_StepOver && vm->callStackDepth > 0)
             {
                 if (stackDepth < vm->callStackDepth || (stackDepth == vm->callStackDepth && !onLastStepLine))
                 {
@@ -822,13 +814,12 @@ void DebugBackend::HookCallback(unsigned long api, lua_State* L, lua_Debug* ar)
 			if (!onLastStepLine && m_scripts[scriptIndex]->GetHasBreakPoint(GetCurrentLine(api, ar) - 1))
             {
                 stop = true;
-				m_breakingState = L;
 				reason = BreakReason::BreakPoint;
             }
         } 
         
         //Break if were doing some kind of stepping 
-		if (m_breakingState == L && !onLastStepLine && (m_mode == Mode_StepInto || (m_mode == Mode_StepOver && vm->callCount == 0) || (m_mode == Mode_StepOut && vm->callCount == 0)))
+		if (!onLastStepLine && (vm->mode == Mode_StepInto || (vm->mode == Mode_StepOver && vm->callCount == 0) || (vm->mode == Mode_StepOut && vm->callCount == 0)))
         {
             stop = true;
 			reason = BreakReason::Step;
@@ -840,7 +831,7 @@ void DebugBackend::HookCallback(unsigned long api, lua_State* L, lua_Debug* ar)
 
         if (stop)
         {
-            BreakFromScript(api, L, reason);
+            BreakFromScript(api, L, vm, reason);
             
             if(vm->luaJitWorkAround)
             {
@@ -853,7 +844,7 @@ void DebugBackend::HookCallback(unsigned long api, lua_State* L, lua_Debug* ar)
     }
     else
     {
-        if (m_mode == Mode_StepOver || m_mode == Mode_StepOut)
+        if (vm->mode == Mode_StepOver || vm->mode == Mode_StepOut)
         {
             if (GetIsHookEventRet( api, arevent)) // only LUA_HOOKRET for Lua 5.2, can also be LUA_HOOKTAILRET for older versions
             {
@@ -937,7 +928,7 @@ void DebugBackend::UpdateHookMode(unsigned long api, lua_State* L, lua_Debug* ho
     if(currentMode != mode)
     {
         //Always switch to Full hook mode when stepping
-        if(m_mode != Mode_Continue)
+        if(vm->mode != Mode_Continue)
         {
             mode = HookMode_Full;
         }
@@ -1004,10 +995,14 @@ int DebugBackend::GetScriptIndex(const char* name) const
 
 }
 
-void DebugBackend::WaitForContinue()
+void DebugBackend::WaitForContinue(VirtualMachine *vm)
 {
+    if (vm == nullptr)
+    {
+        return;
+    }
     // Wait until the UI to tell us to step to the next line.
-    WaitForEvent(m_stepEvent);
+    WaitForEvent(vm->break_event);
 }
 
 void DebugBackend::WaitForEvent(HANDLE hEvent)
@@ -1050,15 +1045,7 @@ void DebugBackend::CommandThreadProc()
 
             // Note, we don't remove the vms here since they will be removed when
             // lua_close is called by the host.
-
-            // If we're supposed to continue running the application after detaching,
-            // set the step event so that we don't stay broken forever.
-            if (continueRunning)
-            {
-                SetEvent(m_stepEvent);
-                SetEvent(m_loadEvent);
-            }
-            else
+            if (!continueRunning)
             {
                 break;
             }
@@ -1073,24 +1060,29 @@ void DebugBackend::CommandThreadProc()
         else
         {
 
-            unsigned int vm;
-            m_commandChannel.ReadUInt32(vm);
-
-            lua_State* L = reinterpret_cast<lua_State*>(vm);
-
+            unsigned int lstate;
+            m_commandChannel.ReadUInt32(lstate);
+            lua_State* L = reinterpret_cast<lua_State*>(lstate);
+            auto it = m_stateToVm.find(L);
+            VirtualMachine* vm = nullptr;
+            if (it != m_stateToVm.end())
+            {
+                vm = it->second;
+            }
+            
             switch (commandId)
             {
             case CommandId_Continue:
-                Continue();
+                Continue(vm);
                 break;
             case CommandId_StepOver:
-                StepOver();
+                StepOver(vm);
                 break;
             case CommandId_StepInto:
-                StepInto();
+                StepInto(vm);
                 break;
 			case CommandId_StepOut:
-				StepOut();
+				StepOut(vm);
 				break;
             case CommandId_DeleteAllBreakpoints:
                 DeleteAllBreakpoints();
@@ -1109,7 +1101,7 @@ void DebugBackend::CommandThreadProc()
                 }
                 break;
             case CommandId_Break:
-                Break();
+                Break(vm);
                 break;
             case CommandId_Evaluate:
                 {
@@ -1185,7 +1177,15 @@ void DebugBackend::CommandThreadProc()
         m_classInfos.clear();
         ClearVector(m_scripts);
         m_nameToScript.clear();
-        ClearVector(m_vms);
+        for (unsigned int i = 0; i < m_vms.size(); ++i)
+        {
+            VirtualMachine* vm = m_vms[i];
+
+            CloseHandle(vm->hThread);
+            CloseHandle(vm->break_event);
+            delete vm;
+        }
+        m_vms.clear();
         m_stateToVm.clear();
     }
     
@@ -1210,74 +1210,54 @@ void DebugBackend::ActiveLuaHookInAllVms()
     }
 }
 
-void DebugBackend::StepInto()
+void DebugBackend::StepInto(VirtualMachine *vm)
 {
     
     CriticalSectionLock lock(m_criticalSection);
     
-    for (unsigned int i = 0; i < m_vms.size(); ++i)
-    {
-        m_vms[i]->callCount = 0;
-    }
-
-    m_mode = Mode_StepInto;
-    SetEvent(m_stepEvent);
-
-    ActiveLuaHookInAllVms();
+    vm->callCount = 0;
+    vm->mode = Mode::Mode_StepInto;
+    SetHookMode(vm->api, vm->L, HookMode::HookMode_Full);
+    SetEvent(vm->break_event);
 }
 
-void DebugBackend::StepOver()
+void DebugBackend::StepOver(VirtualMachine* vm)
 {
 
     CriticalSectionLock lock(m_criticalSection);
     
-    for (unsigned int i = 0; i < m_vms.size(); ++i)
-    {
-        m_vms[i]->callCount = 0;
-    }
-
-    m_mode = Mode_StepOver;
-    SetEvent(m_stepEvent);
-
-    ActiveLuaHookInAllVms();
+    vm->callCount = 0;
+    vm->mode = Mode::Mode_StepOver;
+    SetHookMode(vm->api, vm->L, HookMode::HookMode_Full);
+    SetEvent(vm->break_event);
 }
 
-void DebugBackend::StepOut()
+void DebugBackend::StepOut(VirtualMachine* vm)
 {
 	CriticalSectionLock lock(m_criticalSection);
 
-	for (unsigned int i = 0; i < m_vms.size(); ++i)
-	{
-		m_vms[i]->callCount = 1;
-	}
-
-	m_mode = Mode_StepOut;
-	SetEvent(m_stepEvent);
-
-	ActiveLuaHookInAllVms();
+    vm->callCount = 1;
+    vm->mode = Mode::Mode_StepOut;
+    SetHookMode(vm->api, vm->L, HookMode::HookMode_Full);
+    SetEvent(vm->break_event);
 }
 
 
-void DebugBackend::Continue()
+void DebugBackend::Continue(VirtualMachine* vm)
 {
     
     CriticalSectionLock lock(m_criticalSection);
     
-    for (unsigned int i = 0; i < m_vms.size(); ++i)
-    {
-        m_vms[i]->callCount = 0;
-    }
-
-    m_mode = Mode_Continue;
-	m_breakingState = nullptr;
-    SetEvent(m_stepEvent);
+    vm->callCount = 0;
+    vm->mode = Mode::Mode_Continue;
+    SetEvent(vm->break_event);
 
 }
 
-void DebugBackend::Break()
+void DebugBackend::Break(VirtualMachine* vm)
 {
-    m_mode = Mode_StepInto;
-    ActiveLuaHookInAllVms();
+    vm->mode = Mode::Mode_StepInto;
+    SetHookMode(vm->api, vm->L, HookMode::HookMode_Full);
 }
 
 void DebugBackend::ToggleBreakpoint(lua_State* L, unsigned int scriptIndex, unsigned int line)
@@ -1470,12 +1450,12 @@ void DebugBackend::SendExceptionEvent(lua_State* L, const char* message)
     m_eventChannel.Flush();
 }
 
-void DebugBackend::BreakFromScript(unsigned long api, lua_State* L, BreakReason reason)
+void DebugBackend::BreakFromScript(unsigned long api, lua_State* L, VirtualMachine* vm, BreakReason reason)
 {
-    CriticalSectionLock lock(m_breakLock);
 
     SendBreakEvent(api, L, reason);
-    WaitForContinue();
+    WaitForContinue(vm);
+    CriticalSectionLock lock(m_breakLock);
     ClearCache(api, L);
 }
 
@@ -1572,7 +1552,7 @@ int DebugBackend::ErrorHandler(unsigned long api, lua_State* L)
         {
             SendExceptionEvent(L, message);
             SendBreakEvent(api, L, BreakReason::Exception, 1);
-            WaitForContinue();
+            WaitForContinue(GetVm(L));
             ClearCache(api, L);
         } 
         else 
@@ -1745,12 +1725,12 @@ bool DebugBackend::ExpandTable(unsigned long api, lua_State* L, int stackLevel, 
 
         CriticalSectionLock lock(m_criticalSection);
 
-        StateToVmMap::iterator stateIterator = m_stateToVm.find(L);
-        assert(stateIterator != m_stateToVm.end());
+        const auto vm = GetVm(L);
+        assert(vm != NULL);
 
-        if (stateIterator != m_stateToVm.end())
+        if (vm != NULL)
         {
-            stackLevel += stateIterator->second->stackTop;
+            stackLevel += vm->stackTop;
         }
 
     }
@@ -2156,12 +2136,12 @@ bool DebugBackend::Evaluate(unsigned long api, lua_State* L, const std::string& 
 
         CriticalSectionLock lock(m_criticalSection);
 
-        StateToVmMap::iterator stateIterator = m_stateToVm.find(L);
-        assert(stateIterator != m_stateToVm.end());
+        const auto vm = GetVm(L);
+        assert(vm != NULL);
 
-        if (stateIterator != m_stateToVm.end())
+        if (vm != NULL)
         {
-            stackLevel += stateIterator->second->stackTop;
+            stackLevel += vm->stackTop;
         }
     
     }
@@ -2304,8 +2284,6 @@ bool DebugBackend::Evaluate(unsigned long api, lua_State* L, const std::string& 
     // Reenable the debugger hook
     EnableIntercepts(true);
     SetHookMode(api, L, HookMode_Full);
-    if(GetVm(L)->haveActiveBreakpoints || m_mode == Mode_StepInto || m_mode == Mode_StepOver){
-    }
 
     int t2 = lua_gettop_dll(api, L);
     assert(t1 == t2);
@@ -3510,8 +3488,11 @@ void DebugBackend::WaitForAttach()
     ActiveLuaHookInAllVms();
 
     ResetEvent(m_detachEvent);
-    ResetEvent(m_stepEvent);
     ResetEvent(m_loadEvent);
+    for (auto it = m_vms.begin(); it != m_vms.end(); it++)
+    {
+        ResetEvent((*it)->break_event);
+    }
     // Start a new thread to handle the incoming event channel.
     DWORD threadId;
     m_commandThread = CreateThread(NULL, 0, StaticCommandThreadProc, this, 0, &threadId);

@@ -26,7 +26,7 @@ local getVariable = function(reference)
     return variables[reference]
 end
 
-local function parseVariable(root, frameId)
+local function parseVariable(root, vm, stackLevel)
     local values = {}
     local name = root:name()
     if name ~= 'table' then
@@ -51,7 +51,8 @@ local function parseVariable(root, frameId)
                 variable.variablesReference = m.createVariable {
                     reference = tonumber(valueel['@reference']),
                     type = 'table',
-                    frameId = frameId
+                    stackLevel = stackLevel,
+                    vm = vm
                 }
             end
         elseif valueel:name() == 'function' then
@@ -84,7 +85,7 @@ function m.variables(reference)
     if not variable then return end
     if not variable.value then
         local success, root
-        success, root = event.emit("expand", variable.scope or 0, variable.frameId, variable.reference or 0)
+        success, root = event.emit("expand", variable.scope or 0, variable.vm, variable.stackLevel, variable.reference or 0)
         if not success then
             return {
                 error = {
@@ -93,7 +94,7 @@ function m.variables(reference)
                 }
             }
         end
-        local values = parseVariable(root.___children[1], variable.frameId)
+        local values = parseVariable(root.___children[1], variable.vm, variable.stackLevel)
         if not variable.scope then
             table.sort(values, function(a, b)
                 return a.name < b.name
@@ -109,12 +110,14 @@ end
 
 function m.scopes(frameId)
     local result = {}
+    local vm, stackLevel = frameId >> 5, frameId & 0x1f
     for i, scope in ipairs(scopes) do
         result[i] = {
             name = scope,
             variablesReference = m.createVariable {
                 scope = i,
-                frameId = frameId
+                stackLevel = stackLevel,
+                vm = vm
             },
             expensive = false,
         }
@@ -123,7 +126,8 @@ function m.scopes(frameId)
 end
 
 function m.evaluate(expression, frameId)
-    local success, root = event.emit('evaluate', expression, frameId)
+    local vm, stackLevel = frameId >> 5, frameId & 0x1f
+    local success, root = event.emit('evaluate', expression, vm, stackLevel)
     if not success then
         return {
             error = { format = root, id = 2 },
@@ -150,7 +154,8 @@ function m.evaluate(expression, frameId)
                 type = "table",
                 variablesReference = m.createVariable {
                     reference = tonumber(tableEl["@reference"]),
-                    frameId = frameId
+                    stackLevel = stackLevel,
+                    vm = vm
                 }
             }
         end

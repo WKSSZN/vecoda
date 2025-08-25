@@ -12,8 +12,6 @@ local debugdata
 ---@type LuaDebugMessage
 local message
 
-local curVm = 0
-
 event.on('toggleBreakpoint', function(file, line)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_ToggleBreakpoint)
@@ -37,21 +35,21 @@ local function parseEvaluateResult(success, strret)
     return true, root
 end
 
-event.on('evaluate', function(expression, frameId)
+event.on('evaluate', function(expression, nvm, stackLevel)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Evaluate)
-    debugdata.CommandChannel:WriteUInt32(curVm)
+    debugdata.CommandChannel:WriteUInt32(nvm)
     debugdata.CommandChannel:WriteString(expression or '')
-    debugdata.CommandChannel:WriteUInt32(frameId)
+    debugdata.CommandChannel:WriteUInt32(stackLevel)
     local success = debugdata.CommandChannel:ReadBool()
     local result = debugdata.CommandChannel:ReadString()
     return parseEvaluateResult(success, result)
 end)
 
-event.on('expand', function(scope, frameId, reference)
+event.on('expand', function(scope, nvm, stackLevel, reference)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_ExpandTable)
-    debugdata.CommandChannel:WriteUInt32(curVm)
+    debugdata.CommandChannel:WriteUInt32(nvm)
     debugdata.CommandChannel:WriteUInt32(scope)
-    debugdata.CommandChannel:WriteUInt32(frameId)
+    debugdata.CommandChannel:WriteUInt32(stackLevel)
     debugdata.CommandChannel:WriteUInt32(reference)
     local success = debugdata.CommandChannel:ReadBool()
     local result = debugdata.CommandChannel:ReadString()
@@ -81,7 +79,7 @@ local function handleBreak(nvm, bp, tryStop)
         if fileId ~= 0xffffffff then
             local file = files.getFile(fileId)
             stacks[#stacks+1] = {
-                id = i - 1,
+                id = (nvm << 5) | (i - 1),
                 fileId = fileId,
                 source = {
                     -- sourceReference = fileId,
@@ -97,7 +95,7 @@ local function handleBreak(nvm, bp, tryStop)
     if not bp and not tryStop then
         message.output("stderr", exception.getErrorMessage())
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt32(curVm)
+        debugdata.CommandChannel:WriteUInt32(nvm)
         return
     end
     if not bp and reason == 1 then
@@ -109,12 +107,11 @@ local function handleBreak(nvm, bp, tryStop)
             reason = breakReasons[reason],
             threadId = nvm,
             hitBreakpointIds = bp and { bp.id } or nil,
-            allThreadsStopped = true,
         })
         event.emit('stopped')
     else
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt32(curVm)
+        debugdata.CommandChannel:WriteUInt32(nvm)
     end
 end
 
@@ -160,14 +157,12 @@ function m.update(msg)
         local set = debugdata.EventChannel:ReadUInt32()
         event.emit('setBreakpoints', fileId, line, set == 1)
     elseif eventId == launcher.EventId_Break then
-        curVm = nvm
         handleBreak(nvm, nil, true)
     elseif eventId == launcher.EventId_NameVM then
         debugdata.EventChannel:ReadString()
     elseif eventId == launcher.EventId_DestroyVM then
         vm.exitThread(vm)
     elseif eventId == launcher.EventId_LoadError or eventId == launcher.EventId_Exception then
-        curVm = nvm
         local errorMsg = debugdata.EventChannel:ReadString()
         local bp = breakpoint.getExceptionBreakpoint(eventId)
         exception.setErrorMessage(errorMsg)
@@ -198,44 +193,48 @@ function m.detach()
     end
 end
 
-function m.stepOver()
+function m.stepOver(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepOver)
-    debugdata.CommandChannel:WriteUInt32(curVm) -- vm
+    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
     message.event('continued', {
-        threadId = curVm,
-        allThreadsContinued = true
+        threadId = arg.threadId,
+        allThreadsContinued = false
     })
+    event.emit('continued', arg.threadId)
 end
 
-function m.stepInto()
+function m.stepInto(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepInto)
-    debugdata.CommandChannel:WriteUInt32(curVm) -- vm
+    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
     message.event('continued', {
-        threadId = curVm,
-        allThreadsContinued = true
+        threadId = arg.threadId,
+        allThreadsContinued = false
     })
+    event.emit('continued', arg.threadId)
 end
 
-function m.stepOut()
+function m.stepOut(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepOut)
-    debugdata.CommandChannel:WriteUInt32(curVm) -- vm
+    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
     message.event('continued', {
-        threadId = curVm,
-        allThreadsContinued = true
+        threadId = arg.threadId,
+        allThreadsContinued = false
     })
+    event.emit('continued', arg.threadId)
 end
 
-function m.continue()
+function m.continue(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-    debugdata.CommandChannel:WriteUInt32(curVm) -- vm
+    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
     message.event('continued', {
-        threadId = curVm,
-        allThreadsContinued = true
+        threadId = arg.threadId,
+        allThreadsContinued = false
     })
+    event.emit('continued', arg.threadId)
 end
 
 function m.pause(arg)

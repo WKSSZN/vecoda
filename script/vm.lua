@@ -10,6 +10,10 @@ local threads = {}
 local stackTrace = {}
 local curThread
 
+event.on('continued', function (threadId)
+    stackTrace[threadId] = nil
+end)
+
 function m.init(msg)
     message = msg
     threads = {}
@@ -41,21 +45,15 @@ function m.exitThread(vm)
 end
 
 function m.setStacks(stacks)
-    stackTrace = stacks
+    stackTrace[curThread] = stacks
 end
 
 function m.getStackTrace(threadId)
-    if threadId == curThread then
-        return {
-            totalFrames = #stackTrace,
-            stackFrames = stackTrace
-        }
-    else
-        return {
-            totalFrames = 0,
-            stackFrames = {}
-        }
-    end
+    local stacks = stackTrace[threadId] or {}
+    return {
+        totalFrames = #stacks,
+        stackFrames = stacks
+    }
 end
 
 function m.threads()

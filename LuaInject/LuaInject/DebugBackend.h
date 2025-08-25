@@ -101,26 +101,26 @@ public:
      * Steps execution of a "broken" script by one line. If the current line
      * is a function call, this will step into the function call.
      */
-    void StepInto();
+    void StepInto(VirtualMachine *vm);
 
     /**
      * Steps execution of a "broken" script by one line. If the current line
      * is a function call, this will step over the function call.
      */
-    void StepOver();
+    void StepOver(VirtualMachine* vm);
 
-	void StepOut();
+	void StepOut(VirtualMachine* vm);
 
     /**
      * Continues execution until a breakpoint is hit.
      */
-    void Continue();
+    void Continue(VirtualMachine* vm);
 
     /**
      * Breaks execution of the script on the next line executed.
      * thread.
      */
-    void Break();
+    void Break(VirtualMachine* vm);
 
     void ActiveLuaHookInAllVms();
 
@@ -270,7 +270,7 @@ private:
      * Blocks execution until the the debugger is instructed to continue
      * executing.
      */
-    void WaitForContinue();
+    void WaitForContinue(VirtualMachine *vm);
 
     /**
      * Entry point into the command handling thread.
@@ -287,7 +287,7 @@ private:
      * Breaks from inside the script code. This will block until execution
      * is resumed.
      */
-    void BreakFromScript(unsigned long api, lua_State* L, BreakReason reason);
+    void BreakFromScript(unsigned long api, lua_State* L, VirtualMachine *vm, BreakReason reason);
 
     /**
      * Error handling call back for relaying exceptions.
@@ -405,6 +405,8 @@ private:
         bool            breakpointInStack;
         bool            haveActiveBreakpoints;
         std::string     lastFunctions;
+        HANDLE          break_event;
+        Mode            mode;
     };
 
     struct StackEntry
@@ -578,8 +580,6 @@ private:
 
     FILE*                           m_log;
 
-    Mode                            m_mode;
-    HANDLE                          m_stepEvent;
     HANDLE                          m_loadEvent;
     HANDLE                          m_detachEvent;
 
@@ -604,7 +604,6 @@ private:
     std::vector<Api>                m_apis;
 
     mutable bool                    m_warnedAboutUserData;
-	lua_State*						m_breakingState;
 
     int                             m_refPos;
     int                             m_tableCachePos;

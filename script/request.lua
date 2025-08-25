@@ -31,6 +31,7 @@ function handlers.initialize(req)
         supportsHitConditionalBreakpoints = true,
         -- supportsRestartRequest = true,
         exceptionBreakpointFilters = breakpoint.getFilters(),
+        -- supportsSingleThreadExecutionRequests = true,
     })
     message.event("initialized")
 end
@@ -154,22 +155,27 @@ function handlers.restart(req)
 end
 
 function handlers.continue(req)
-    worker.continue()
+    worker.continue(req.arguments)
     message.success(req)
 end
 
 function handlers.next(req)
-    worker.stepOver()
+    worker.stepOver(req.arguments)
     message.success(req)
 end
 
 function handlers.stepIn(req)
-    worker.stepInto()
+    worker.stepInto(req.arguments)
     message.success(req)
 end
 
 function handlers.stepOut(req)
-    worker.stepOut()
+    worker.stepOut(req.arguments)
+    message.success(req)
+end
+
+function handlers.pause(req)
+    worker.pause(req.arguments)
     message.success(req)
 end
 
