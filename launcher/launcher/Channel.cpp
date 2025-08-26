@@ -379,6 +379,10 @@ void Channel::ContinueNReadUInt32()
             }
 
         }
+        else
+        {
+            m_value = 0xffffffff;
+        }
     }
     m_nreadFinish = true;
     m_result = result;
