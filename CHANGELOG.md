@@ -1,5 +1,7 @@
 # Change Log
 
+### 2.0.0
+适配lua5.3 lua5.4
 ### 1.1.5
 修复程序正常退出时，debug adapter没办法同步退出的bug
 ### 1.1.4

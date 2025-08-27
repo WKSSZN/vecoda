@@ -44,10 +44,32 @@ extern "C"
 		struct CallInfo *i_ci;  /* active function */
 	};
 
+	struct lua_Debug_54
+	{
+		int event;
+		const char* name;
+		const char* namewhat;
+		const char* what;
+		const char* source;
+		size_t srclen;
+		int currentline;
+		int linedefined;
+		int lastlinedefined;
+		unsigned char nups;
+		unsigned char nparams;
+		char isvararg;
+		char istailcall;
+		unsigned short ftransfer;
+		unsigned short ntransfer;
+		char short_src[LUA_IDSIZE];
+		struct CallInfo* i_ci;
+	};
+
 	union lua_Debug
 	{
 		lua_Debug_51 ld51;
 		lua_Debug_52 ld52;
+		lua_Debug_54 ld54;
 	};
 
 	// =====================================================
@@ -103,6 +125,9 @@ extern "C"
 	typedef int (*lua_CFunction) (lua_State *L);
 	typedef const char * (*lua_Reader) (lua_State *L, void *ud, size_t *sz);
 
+#define LUA_KCONTEXT	int
+	typedef LUA_KCONTEXT lua_KContext;
+	typedef int (*lua_KFunction) (lua_State* L, int status, lua_KContext ctx);
 } // extern "C"
 
 #endif // __LuaTypes_h__

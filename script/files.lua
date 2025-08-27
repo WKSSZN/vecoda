@@ -22,26 +22,28 @@ end
 
 function m.addFile(name, content)
     name = name:gsub('/', '\\')
-    local path = baseDir .. name
-    if fs.exists(path) then
+    if not fs.path(name):is_absolute() then
+        name = baseDir .. name
+    end
+    if fs.exists(name) then
         files[fileId] = {
-            name = path:match('([^/]+)$'),
-            path = path,
+            name = name:match('([^/]+)$'),
+            path = name,
             content = content,
             breakpoints = {},
-            lowerpath = path:lower(),
+            lowerpath = name:lower(),
             id = fileId
         }
         message.event('loadedSource', {
             reason = 'new',
             source = {
-                path = path,
+                path = name,
                 name = files[fileId].name,
                 -- sourceReference = fileId,
             },
         })
-        path2file[path:lower()] = files[fileId]
-        event.emit("loadFile", path:lower())
+        path2file[name:lower()] = files[fileId]
+        event.emit("loadFile", name:lower())
     else
         files[fileId] = {
             name = "Memory",
