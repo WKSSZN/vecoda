@@ -2187,7 +2187,12 @@ void lua_getfenv_dll(unsigned long api, lua_State *L, int index)
         // _ENV is left on the stack (or not)
         if (upname == NULL)
         {
-            lua_pushnil_dll( api, L);
+            lua_rawgeti_dll(api, L, GetRegistryIndex(api), g_interfaces[api].globalsIndex);
+            if (lua_isnil_dll(api, L, -1))
+            {
+                lua_pop_dll(api, L, 1);
+                lua_newtable_dll(api, L);
+            }
         }
     }
 }
