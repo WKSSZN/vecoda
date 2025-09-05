@@ -1814,7 +1814,7 @@ int DebugBackend::CacheTable(unsigned long api, lua_State* L, int table)
     }
     else
     {
-        ref = lua_tonumber_dll(api, L, -1);
+        ref = lua_tointeger_dll(api, L, -1);
     }
     lua_pop_dll(api, L, 2); // pop table ref and cache table
 
