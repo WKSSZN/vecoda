@@ -1758,7 +1758,7 @@ int lua_tointeger_dll(unsigned long api, lua_State* L, int index)
         // Lua 5.3+ implementation.
         if (g_interfaces[api].lua_tointegerx_530_dll_cdecl != NULL)
         {
-            return g_interfaces[api].lua_tointegerx_dll_cdecl(L, index, NULL);
+            return g_interfaces[api].lua_tointegerx_530_dll_cdecl(L, index, NULL);
         }
         else
         {
