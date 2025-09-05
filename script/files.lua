@@ -21,7 +21,7 @@ function m.init(msg, cwd)
 end
 
 function m.addFile(name, content)
-    name = name:gsub('/', '\\')
+    name = name:gsub("^%.\\", ""):gsub('/', '\\')
     if not fs.path(name):is_absolute() then
         name = baseDir .. name
     end
