@@ -105,7 +105,7 @@ luamake
 
 ### 启动流程
 vscode按扩展注册的启动Debug Adapter(bin/luadebug.exe)，在进行一些列初始化之后，vscode发送`launch`命令，带上在`launch.json`里配置的参数，随后`Debug Adapter`使用`launcher.dll`启动指定的程序，注入`LuaInject.dll`，hook lua代码，随后进行断点的设置。  
-更详细的交互流程参考[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，`Debig Adapter`和vscode之间通信用的是[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，使用stdio通信。
+更详细的交互流程参考[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，`Debug Adapter`和vscode之间通信协议用的是[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，使用stdio通信。
 ## 版本
 ### 2.0.0
 适配lua5.3 lua5.4
