@@ -22,33 +22,55 @@ along with Decoda.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef HOOK_H
 #define HOOK_H
+#include <MinHook.h>
+#include <type_traits>
 
-/**
- * Returns true if the specified function is already hooked. Functions
- * cannot be rehooked to the same hook, so this should be tested before
- * calling HookFunction if there is any danger of that happening.
- */
-bool GetIsHooked(void* function, void* hook);
+void* HookFunction(void* function, void* hook, void* api, size_t functionArgNum);
+void* InstanceFunction(void* function, void* upValue, size_t functionArgNum);
 
-/**
- * Installs a hook function that will be called instead of the original
- * function. The function returns a pointer to a new function that can
- * be used to call the original function (or NULL if there was an error).
- */
-void* HookFunction(void* function, void* hook);
+template<typename R, typename... Args>
+using TargetFuncPtr = R(*)(Args...);
 
-/**
- * Installs a hook function that will be called instead of the original
- * function. The function returns a pointer to a new function that can
- * be used to call the original function (or NULL if there was an error).
- * The up value will be pushed onto the stack prior right before the hook
- * function is called and it's the reponsibility of the hook function
- * to remove that value before it returns.
- */
-void* HookFunction(void* function, void* hook, unsigned long upValue);
+template<typename R, typename I, typename... Args>
+using InstanceFuncPtr = R(*)(I, Args...);
 
-/**
- */
-void* InstanceFunction(void* function, unsigned long upValue);
+template<typename R, typename I, typename... Args>
+TargetFuncPtr<R, Args...> HookFunction(TargetFuncPtr<R, Args...> function, InstanceFuncPtr<R, I, Args...> hook, I api)
+{
+	constexpr std::size_t argNum = sizeof...(Args);
+	return reinterpret_cast<TargetFuncPtr<R, Args...>>(HookFunction(function, hook, reinterpret_cast<void*>(api), argNum));
+}
+
+template<typename R, typename... Args>
+TargetFuncPtr<R, Args...> HookFunction(TargetFuncPtr<R, Args...> function, TargetFuncPtr<R, Args...> hook)
+{
+	void* original;
+	MH_CreateHook(function, hook, &original);
+	MH_EnableHook(function);
+	return reinterpret_cast<TargetFuncPtr<R, Args...>>(original);
+}
+
+#ifdef WIN32
+template<typename R, typename... Args>
+using TargetStdFuncPtr = R(__stdcall*)(Args...);
+
+template<typename R, typename... Args>
+TargetStdFuncPtr<R, Args...> HookFunction(TargetStdFuncPtr<R, Args...> function, TargetStdFuncPtr<R, Args...> hook)
+{
+	void* original;
+	MH_CreateHook(function, hook, &original);
+	MH_EnableHook(function);
+	return reinterpret_cast<TargetStdFuncPtr<R, Args...>>(original);
+}
+#endif // WIN32
+
+
+
+template<typename R, typename I, typename... Args>
+TargetFuncPtr<R, Args...> InstanceFunction(InstanceFuncPtr<R, I, Args...> function, I api)
+{
+	constexpr std::size_t argNum = sizeof...(Args);
+	return reinterpret_cast<TargetFuncPtr<R, Args...>>(InstanceFunction(function, reinterpret_cast<void*>(api), argNum));
+}
 
 #endif

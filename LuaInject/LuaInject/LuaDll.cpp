@@ -249,48 +249,6 @@ struct CPCallHandlerArgs
     void*                       data;
 };
 
-/**
- * This macro outputs the prolog code for a naked intercept function. It
- * should be the first code in the function.
- */
-#define INTERCEPT_PROLOG()                          \
-	__asm                                           \
-    {                                               \
-        __asm push    ebp                           \
-        __asm mov     ebp,            esp           \
-        __asm sub     esp,            __LOCAL_SIZE  \
-    }
-
-/**
- * This macro outputs the epilog code for a naked intercept function. It
- * should be the last code in the function. argsSize is the number of 
- * bytes for the arguments to the function (not including the the api parameter).
- * The return from the function should be stored in the "result" variable.
- */
-#define INTERCEPT_EPILOG()                  \
-    __asm                                           \
-    {                                               \
-        __asm mov     eax,            result        \
-        __asm mov     esp,            ebp           \
-        __asm pop     ebp                           \
-        __asm ret     4                             \
-    }
-
-/**
- * This macro outputs the epilog code for a naked intercept function that doesn't
- * have a return value. It should be the last code in the function. argsSize is the
- * number of  bytes for the arguments to the function (not including the the api
- * parameter).
- */
-#define INTERCEPT_EPILOG_NO_RETURN()        \
-    __asm                                           \
-    {                                               \
-        __asm mov     esp,            ebp           \
-        __asm pop     ebp                           \
-        __asm ret     4                             \
-    }
-
-
 LoadLibraryExW_t                LoadLibraryExW_dll      = NULL;
 LdrLockLoaderLock_t             LdrLockLoaderLock_dll   = NULL;
 LdrUnlockLoaderLock_t           LdrUnlockLoaderLock_dll = NULL;
@@ -347,35 +305,20 @@ const char* MemoryReader_cdecl(lua_State* L, void* data, size_t* size)
 
 }
 
-#pragma auto_inline(off)
-int DecodaOutputWorker(unsigned long api, lua_State* L)
+
+int DecodaOutput(unsigned long api, lua_State* L)
 {
 
     const char* message = lua_tostring_dll(api, L, 1);
     DebugBackend::Get().Message(message);
-    
+
     return 0;
 
 }
-#pragma auto_inline()
 
-__declspec(naked) int DecodaOutput(unsigned long api, lua_State* L)
+int CPCallHandler(unsigned long api, lua_State* L)
 {
 
-    int result;
-
-    INTERCEPT_PROLOG()
-
-    result = DecodaOutputWorker(api, L);
-
-    INTERCEPT_EPILOG()
-
-}
-
-#pragma auto_inline(off)
-int CPCallHandlerWorker(unsigned long api, lua_State* L)
-{
-    
     CPCallHandlerArgs args = *static_cast<CPCallHandlerArgs*>(lua_touserdata_dll(api, L, 1));
 
     // Remove the old args and put the new one on the stack.
@@ -383,20 +326,6 @@ int CPCallHandlerWorker(unsigned long api, lua_State* L)
     lua_pushlightuserdata_dll(api, L, args.data);
 
     return args.function(api, L);
-
-}
-#pragma auto_inline()
-
-__declspec(naked) int CPCallHandler(unsigned long api, lua_State* L)
-{
-
-    int result;
-        
-    INTERCEPT_PROLOG()
-    
-    result = CPCallHandlerWorker(api, L);
-
-    INTERCEPT_EPILOG()
 
 }
 
@@ -414,23 +343,9 @@ int lua_cpcall_dll(unsigned long api, lua_State *L, lua_CFunction_dll func, void
     return lua_pcall_dll(api, L, 1, 0, 0);
 }
 
-#pragma auto_inline(off)
-void HookHandlerWorker(unsigned long api, lua_State* L, lua_Debug* ar)
+void HookHandler(unsigned long api, lua_State* L, lua_Debug* ar)
 {
     return DebugBackend::Get().HookCallback(api, L, ar);
-}
-#pragma auto_inline()
-
-__declspec(naked) void HookHandler(unsigned long api, lua_State* L, lua_Debug* ar)
-{
-
-
-    INTERCEPT_PROLOG()
-    
-    HookHandlerWorker(api, L, ar);
-
-    INTERCEPT_EPILOG_NO_RETURN()
-
 }
 
 void SetHookMode(unsigned long api, lua_State* L, HookMode mode)
@@ -1490,8 +1405,7 @@ HMODULE WINAPI LoadLibraryExW_intercept(LPCWSTR fileName, HANDLE hFile, DWORD dw
 
 }
 
-#pragma auto_inline(off)
-void lua_call_worker(unsigned long api, lua_State* L, int nargs, int nresults)
+void lua_call_intercept(unsigned long api, lua_State* L, int nargs, int nresults)
 {
     DebugBackend::Get().AttachState(api, L);
     if (lua_gettop_dll(api, L) < nargs + 1)
@@ -1504,26 +1418,8 @@ void lua_call_worker(unsigned long api, lua_State* L, int nargs, int nresults)
         lua_error_dll(api, L);
     }
 }
-#pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) void lua_call_intercept(unsigned long api, lua_State* L, int nargs, int nresults)
-{
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    lua_call_worker(api, L, nargs, nresults);
-
-    INTERCEPT_EPILOG_NO_RETURN()
-
-}
-
-#pragma auto_inline(off)
-void lua_callk_worker(unsigned long api, lua_State* L, int nargs, int nresults, int ctk, lua_CFunction k)
+void lua_callk_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int ctx, lua_CFunction k)
 {
     DebugBackend::Get().AttachState(api, L);
     if (lua_gettop_dll(api, L) < nargs + 1)
@@ -1536,27 +1432,8 @@ void lua_callk_worker(unsigned long api, lua_State* L, int nargs, int nresults, 
         lua_error_dll(api, L);
     }
 }
-#pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) void lua_callk_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int ctx, lua_CFunction k)
-{
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    lua_callk_worker(api, L, nargs, nresults, ctx, k);
-
-    INTERCEPT_EPILOG_NO_RETURN()
-
-}
-
-
-#pragma auto_inline(off)
-int lua_pcall_worker(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc)
+int lua_pcall_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc)
 {
     int result;
     DebugBackend::Get().AttachState(api, L);
@@ -1575,31 +1452,11 @@ int lua_pcall_worker(unsigned long api, lua_State* L, int nargs, int nresults, i
         result = lua_pcall_dll(api, L, nargs, nresults, errfunc);
     }
 
-    return result;    
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int lua_pcall_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc)
-{
-
-    int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_pcall_worker(api, L, nargs, nresults, errfunc);
-
-    INTERCEPT_EPILOG()
+    return result;
 
 }
 
-#pragma auto_inline(off)
-int lua_pcallk_worker(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, int ctx, lua_CFunction k)
+int lua_pcallk_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, int ctx, lua_CFunction k)
 {
 
     int result;
@@ -1615,31 +1472,11 @@ int lua_pcallk_worker(unsigned long api, lua_State* L, int nargs, int nresults, 
         result = lua_pcallk_dll(api, L, nargs, nresults, errfunc, ctx, k);
     }
 
-    return result;    
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int lua_pcallk_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, int ctx, lua_CFunction k)
-{
-
-    int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_pcallk_worker(api, L, nargs, nresults, errfunc, ctx, k);
-
-    INTERCEPT_EPILOG()
+    return result;
 
 }
 
-#pragma auto_inline(off)
-lua_State* lua_newstate_worker(unsigned long api, lua_Alloc f, void* ud)
+lua_State* lua_newstate_intercept(unsigned long api, lua_Alloc f, void* ud)
 {
 
     lua_State* result = NULL;
@@ -1648,7 +1485,7 @@ lua_State* lua_newstate_worker(unsigned long api, lua_Alloc f, void* ud)
     {
         result = g_interfaces[api].lua_newstate_dll_cdecl(f, ud);
     }
-    
+
     if (result != NULL)
     {
         DebugBackend::Get().AttachState(api, result);
@@ -1657,66 +1494,25 @@ lua_State* lua_newstate_worker(unsigned long api, lua_Alloc f, void* ud)
     return result;
 
 }
-#pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) lua_State* lua_newstate_intercept(unsigned long api, lua_Alloc f, void* ud)
+lua_State* lua_newthread_intercept(unsigned long api, lua_State* L)
 {
 
-    lua_State*      result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_newstate_worker(api, f, ud);
-
-    INTERCEPT_EPILOG()
-
-}
-
-#pragma auto_inline(off)
-lua_State* lua_newthread_worker(unsigned long api, lua_State* L)
-{
-    
     lua_State* result = NULL;
     if (g_interfaces[api].lua_newthread_dll_cdecl != NULL)
     {
         result = g_interfaces[api].lua_newthread_dll_cdecl(L);
     }
-    
+
     if (result != NULL)
     {
         DebugBackend::Get().AttachState(api, result);
     }
 
     return result;
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) lua_State* lua_newthread_intercept(unsigned long api, lua_State* L)
-{
-
-    lua_State*      result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_newthread_worker(api, L);
-
-    INTERCEPT_EPILOG()
-
 }
 
-#pragma auto_inline(off)
-lua_State* lua_open_worker(unsigned long api, int stacksize)
+lua_State* lua_open_intercept(unsigned long api, int stacksize)
 {
 
     lua_State* result = NULL;
@@ -1725,72 +1521,30 @@ lua_State* lua_open_worker(unsigned long api, int stacksize)
     {
         result = g_interfaces[api].lua_open_dll_cdecl(stacksize);
     }
-    
+
     if (result != NULL)
     {
         DebugBackend::Get().AttachState(api, result);
     }
 
     return result;
-
 }
-#pragma auto_inline()
 
-#pragma auto_inline(off)
-lua_State* lua_open_500_worker(unsigned long api)
+lua_State* lua_open_500_intercept(unsigned long api)
 {
-
     lua_State* result = NULL;
 
     if (g_interfaces[api].lua_open_500_dll_cdecl != NULL)
     {
         result = g_interfaces[api].lua_open_500_dll_cdecl();
     }
-    
+
     if (result != NULL)
     {
         DebugBackend::Get().AttachState(api, result);
     }
 
     return result;
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) lua_State* lua_open_intercept(unsigned long api, int stacksize)
-{
-
-    lua_State*      result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_open_worker(api, stacksize);
-
-    INTERCEPT_EPILOG()
-
-}
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) lua_State* lua_open_500_intercept(unsigned long api)
-{
-
-    lua_State*      result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_open_500_worker(api);
-
-    INTERCEPT_EPILOG()
-
 }
 
 #pragma auto_inline(off)
@@ -1855,70 +1609,29 @@ int lua_load_worker(unsigned long api, lua_State* L, lua_Reader reader, void* da
 }
 #pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int lua_load_510_intercept(unsigned long api, lua_State* L, lua_Reader reader, void* data, const char* name)
+int lua_load_510_intercept(unsigned long api, lua_State* L, lua_Reader reader, void* data, const char* name)
 {
     int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
     result = lua_load_worker(api, L, reader, data, name, NULL);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int lua_load_intercept(unsigned long api, lua_State* L, lua_Reader reader, void* data, const char* name, const char* mode)
+int lua_load_intercept(unsigned long api, lua_State* L, lua_Reader reader, void* data, const char* name, const char* mode)
 {
     int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
     result = lua_load_worker(api, L, reader, data, name, mode);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
-#pragma auto_inline(off)
-void lua_close_worker(unsigned long api, lua_State* L)
+void lua_close_intercept(unsigned long api, lua_State* L)
 {
     g_interfaces[api].lua_close_dll_cdecl(L);
 
     DebugBackend::Get().DetachState(api, L);
-    
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) void lua_close_intercept(unsigned long api, lua_State* L)
-{
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    lua_close_worker(api, L);
-
-    INTERCEPT_EPILOG_NO_RETURN()
-
 }
 
-#pragma auto_inline(off)
-int luaL_newmetatable_worker(unsigned long api, lua_State *L, const char* tname)
+int luaL_newmetatable_intercept(unsigned long api, lua_State* L, const char* tname)
 {
-
     int result = 0;
 
     if (g_interfaces[api].luaL_newmetatable_dll_cdecl != NULL)
@@ -1933,72 +1646,20 @@ int luaL_newmetatable_worker(unsigned long api, lua_State *L, const char* tname)
     }
 
     return result;
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int luaL_newmetatable_intercept(unsigned long api, lua_State* L, const char* tname)
-{
-
-    int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = luaL_newmetatable_worker(api, L, tname);
-
-    INTERCEPT_EPILOG()
-
 }
 
-#pragma auto_inline(off)
-int lua_sethook_worker(unsigned long api, lua_State *L, lua_Hook f, int mask, int count)
+int lua_sethook_intercept(unsigned long api, lua_State *L, lua_Hook f, int mask, int count)
 {
-
     DebugBackend::Get().AttachState(api, L);
     // Currently we're using the hook and can't let anyone else use it.
     // What we should do is implement the lua hook on top of our existing hook.
-        
+
     return 0;
-
-}
-#pragma auto_inline()
-
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int lua_sethook_intercept(unsigned long api, lua_State *L, lua_Hook f, int mask, int count)
-{
-
-    int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
-    result = lua_sethook_worker(api, L, f, mask, count);
-
-    INTERCEPT_EPILOG()
-
 }
 
-#pragma auto_inline(off)
-void lua_sethook_530_worker(unsigned long api, lua_State* L, lua_Hook f, int mask, int count)
+void lua_sethook_530_intercept(unsigned long api, lua_State* L, lua_Hook f, int mask, int count)
 {
     DebugBackend::Get().AttachState(api, L);
-}
-#pragma auto_inline()
-
-__declspec(naked) void lua_sethook_530_intercept(unsigned api, lua_State* L, lua_Hook f, int mask, int count)
-{
-
-    INTERCEPT_PROLOG()
-    lua_sethook_530_worker(api, L, f, mask, count);
-    INTERCEPT_EPILOG_NO_RETURN()
 }
 
 #pragma auto_inline(off)
@@ -2025,40 +1686,20 @@ int luaL_loadbufferx_worker(unsigned long api, lua_State* L, const char* buff, s
 }
 #pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int luaL_loadbuffer_intercept(unsigned long api, lua_State *L, const char *buff, size_t sz, const char *name)
+int luaL_loadbuffer_intercept(unsigned long api, lua_State *L, const char *buff, size_t sz, const char *name)
 {
 
     int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interfering with the inline assembly and other strange
-    // aspects of this function.
     result = luaL_loadbufferx_worker(api, L, buff, sz, name, NULL);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int luaL_loadbufferx_intercept(unsigned long api, lua_State *L, const char *buff, size_t sz, const char *name, const char* mode)
+int luaL_loadbufferx_intercept(unsigned long api, lua_State *L, const char *buff, size_t sz, const char *name, const char* mode)
 {
 
     int     result;
-
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interfering with the inline assembly and other strange
-    // aspects of this function.
     result = luaL_loadbufferx_worker(api, L, buff, sz, name, mode);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
 #pragma auto_inline(off)
@@ -2110,40 +1751,25 @@ int luaL_loadfilex_worker(unsigned long api, lua_State *L, const char *fileName,
 }
 #pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int luaL_loadfile_intercept(unsigned long api, lua_State *L, const char *fileName)
+
+int luaL_loadfile_intercept(unsigned long api, lua_State *L, const char *fileName)
 {
 
     int     result;
 
-    INTERCEPT_PROLOG()
-
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
     result = luaL_loadfilex_worker(api, L, fileName, NULL);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) int luaL_loadfilex_intercept(unsigned long api, lua_State *L, const char *fileName, const char* mode)
+
+int luaL_loadfilex_intercept(unsigned long api, lua_State *L, const char *fileName, const char* mode)
 {
 
     int     result;
 
-    INTERCEPT_PROLOG()
 
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
     result = luaL_loadfilex_worker(api, L, fileName, mode);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
 #pragma auto_inline(off)
@@ -2167,22 +1793,15 @@ lua_State* luaL_newstate_worker(unsigned long api)
 }
 #pragma auto_inline()
 
-// This function cannot be called like a normal function. It changes its
-// calling convention at run-time and removes and extra argument from the stack.
-__declspec(naked) lua_State* luaL_newstate_intercept(unsigned long api)
+
+lua_State* luaL_newstate_intercept(unsigned long api)
 {
 
     lua_State*      result;
-
-    INTERCEPT_PROLOG()
     
-    // We push the actual functionality of this function into a separate, "normal"
-    // function so avoid interferring with the inline assembly and other strange
-    // aspects of this function.
+
     result = luaL_newstate_worker(api);
-
-    INTERCEPT_EPILOG()
-
+    return result;
 }
 
 std::string GetEnvironmentVariable(const std::string& name)
@@ -2252,8 +1871,8 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
     #define HOOK_FUNCTION(function)                                                                                             \
         if (luaInterface.function##_dll_cdecl != NULL)                                                                          \
         {                                                                                                                       \
-            void* original = luaInterface.function##_dll_cdecl;                                                                 \
-            luaInterface.function##_dll_cdecl = (function##_cdecl_t)(HookFunction(original, function##_intercept, api));        \
+            auto original = luaInterface.function##_dll_cdecl;                                                                 \
+            luaInterface.function##_dll_cdecl = (HookFunction(original, function##_intercept, api));        \
         }
 
     LuaInterface luaInterface = { 0 };
@@ -2980,7 +2599,8 @@ void HookLoadLibrary()
     {
         // LoadLibraryExW is called by the other LoadLibrary functions, so we
         // only need to hook it.
-        LoadLibraryExW_dll = (LoadLibraryExW_t) HookFunction( GetProcAddress(hModuleKernel, "LoadLibraryExW"), LoadLibraryExW_intercept);
+        auto p = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(hModuleKernel, "LoadLibraryExW"));
+        LoadLibraryExW_dll = HookFunction(p , LoadLibraryExW_intercept);
     }
 
     // These NTDLL functions are undocumented and don't exist in Windows 2000.
@@ -3086,24 +2706,9 @@ struct CFunctionArgs
     lua_CFunction_dll   function;
 };
 
-#pragma auto_inline(off)
-int CFunctionHandlerWorker(CFunctionArgs* args, lua_State* L)
+int CFunctionHandler(CFunctionArgs* args, lua_State* L)
 {
     return args->function(args->api, L);
-}
-#pragma auto_inline()
-
-__declspec(naked) int CFunctionHandler(CFunctionArgs* args, lua_State* L)
-{
-
-    int result;
-        
-    INTERCEPT_PROLOG()
-    
-    result = CFunctionHandlerWorker(args, L);
-
-    INTERCEPT_EPILOG()
-
 }
 
 lua_CFunction CreateCFunction(unsigned long api, lua_CFunction_dll function)
@@ -3115,6 +2720,6 @@ lua_CFunction CreateCFunction(unsigned long api, lua_CFunction_dll function)
     args->api       = api;
     args->function  = function;
 
-    return (lua_CFunction)InstanceFunction(CFunctionHandler, reinterpret_cast<unsigned long>(args));
+    return InstanceFunction(CFunctionHandler, args);
     
 }
