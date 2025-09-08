@@ -153,11 +153,6 @@ int GetRegistryIndex(unsigned long api);
 void EnableIntercepts(bool enableIntercepts);
 bool GetAreInterceptsEnabled();
 
-/**
- * Returns true if the specified API uses the stdcall calling convention.
- */
-bool GetIsStdCall(unsigned long api);
-
 enum HookMode
 {
     HookMode_None,

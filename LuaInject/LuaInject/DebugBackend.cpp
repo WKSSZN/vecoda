@@ -267,6 +267,11 @@ DebugBackend::VirtualMachine* DebugBackend::AttachState(unsigned long api, lua_S
     }
 
     CriticalSectionLock lock(m_criticalSection);
+    auto it = m_stateToVm.find(L);
+    if (it != m_stateToVm.end())
+    {
+        return it->second;
+    }
 
     // Check if the virtual machine is aleady in our list. This happens
     // if we're attaching this virtual machine implicitly through lua_call
@@ -1927,15 +1932,15 @@ int DebugBackend::IndexChained(unsigned long api, lua_State* L)
     {
         lua_pop_dll(api, L, 1);
         lua_pushvalue_dll(api, L, key);
-        lua_gettable_dll(api, L, table[2]);
-    }
+                lua_gettable_dll(api, L, table[2]);
+            }
 
     // If the value is our nil sentinel, convert it to an actual nil.
     if (lua_rawequal_dll(api, L, -1, nilSentinel))
     {
-        lua_pop_dll(api, L, 1);
-        lua_pushnil_dll(api, L);
-    }
+                lua_pop_dll(api, L, 1);
+                lua_pushnil_dll(api, L);
+            }
 
     return 1;
 
@@ -3138,14 +3143,7 @@ int DebugBackend::ObjectCollectionCallback(lua_State* L)
         lua_pushvalue_dll(api, L, tableIndex);
         lua_pushvalue_dll(api, L, callbackIndex);
 
-        if (GetIsStdCall(api))
-        {
-            lua_pushcclosure_dll(api, L, (lua_CFunction)(ObjectCollectionCallback_stdcall), 2);
-        }
-        else
-        {
-            lua_pushcclosure_dll(api, L, ObjectCollectionCallback, 2);
-        }
+        lua_pushcclosure_dll(api, L, ObjectCollectionCallback, 2);
 
         DebugBackend::Get().CreateGarbageCollectionSentinel(api, L);
 
@@ -3155,11 +3153,6 @@ int DebugBackend::ObjectCollectionCallback(lua_State* L)
     
     return 0;
 
-}
-
-int __stdcall DebugBackend::ObjectCollectionCallback_stdcall(lua_State* L)
-{
-    return ObjectCollectionCallback(L);
 }
 
 void DebugBackend::CreateGarbageCollectionSentinel(unsigned long api, lua_State* L)
@@ -3211,14 +3204,7 @@ void DebugBackend::SetGarbageCollectionCallback(unsigned long api, lua_State* L,
 
     lua_pushvalue_dll(api, L, callbackIndex);
 
-    if (GetIsStdCall(api))
-    {
-        lua_pushcclosure_dll(api, L, (lua_CFunction)(ObjectCollectionCallback_stdcall), 2);
-    }
-    else
-    {
-        lua_pushcclosure_dll(api, L, ObjectCollectionCallback, 2);
-    }
+    lua_pushcclosure_dll(api, L, ObjectCollectionCallback, 2);
         
     CreateGarbageCollectionSentinel(api, L);
 

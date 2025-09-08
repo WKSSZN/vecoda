@@ -508,12 +508,6 @@ private:
      * internally as a callback and checks if the object is still alive or not.
      */
     static int ObjectCollectionCallback(lua_State* L);
-    
-    /**
-     * Used by the mechism to setup a garbage collection callback. This function is used
-     * internally as a callback and checks if the object is still alive or not.
-     */
-    static int __stdcall ObjectCollectionCallback_stdcall(lua_State* L);
 
     /**
      */
