@@ -907,6 +907,7 @@ int lua_sethook_dll(unsigned long api, lua_State* L, lua_Hook f, int mask, int c
     if (g_interfaces[api].lua_sethook_530_dll_cdecl != NULL)
     {
         g_interfaces[api].lua_sethook_530_dll_cdecl(L, f, mask, count);
+        return 0;
     }
     else
     {
@@ -1145,7 +1146,7 @@ const char* lua_tostring_dll(unsigned long api, lua_State* L, int index)
     else
     {
         // Lua 5.0 version.
-        g_interfaces[api].lua_tolstring_dll_cdecl(L, index, NULL);
+        return g_interfaces[api].lua_tolstring_dll_cdecl(L, index, NULL);
     }
 }
 
@@ -1198,7 +1199,7 @@ int lua_tointeger_dll(unsigned long api, lua_State* L, int index)
     if (g_interfaces[api].lua_tointegerx_530_dll_cdecl != NULL)
     {
         // Lua 5.3+ implementation.
-        return g_interfaces[api].lua_tointegerx_530_dll_cdecl(L, index, NULL);
+        return (int)g_interfaces[api].lua_tointegerx_530_dll_cdecl(L, index, NULL);
     }
     if (g_interfaces[api].lua_tointeger_dll_cdecl != NULL)
     {
