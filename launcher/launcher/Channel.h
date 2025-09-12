@@ -12,10 +12,12 @@ public:
 	bool WaitForConnection();
 	void Destroy();
 	bool WriteUInt32(unsigned int value);
+	bool WriteUInt(size_t);
 	bool WriteString(const char* value);
 	bool WriteString(const std::string& value);
 	bool WriteBool(bool value);
 	bool ReadUInt32(unsigned int& value);
+	bool ReadUInt(size_t&);
 	bool ReadString(std::string& value);
 	bool ReadBool(bool& value);
 	bool NReadUInt32(unsigned int& value);
