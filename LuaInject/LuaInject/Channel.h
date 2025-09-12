@@ -72,6 +72,11 @@ public:
     bool WriteUInt32(unsigned int value);
 
     /**
+     * Writes a platform-based unsigned integer to the channel and returns immediately.
+     */
+    bool WriteUInt(size_t);
+
+    /**
      * Writes a string to the channel and returns immediately.
      */
     bool WriteString(const char* value);
@@ -91,6 +96,13 @@ public:
      * until the data is available.
      */
     bool ReadUInt32(unsigned int& value);
+
+    /**
+    * Reads a platform-based unsigned integer from the channel, This operation blocks
+    * until the data is avalible.
+    */
+    bool ReadUInt(size_t&);
+
 
     /**
      * Reads a string from the channel. This operation blocks until the
