@@ -27,8 +27,6 @@ along with Decoda.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "LuaTypes.h"
 
-#include <LuaPlus.h>
-
 typedef int (*lua_CFunction_dll) (unsigned long api, lua_State *L);
 
 lua_State*      lua_newstate_dll        (unsigned long api, lua_Alloc, void*);
@@ -102,10 +100,6 @@ int             lua_checkstack_dll      (unsigned long api, lua_State *L, int ex
  */
 bool lua_pushthread_dll(unsigned long api, lua_State *L);
 
-// These functoin only exists in LuaPlus. If the application is not using LuaPlus,
-// lua_towstring will return NULL and lua_iswstring will return 0.
-const lua_WChar*    lua_towstring_dll   (unsigned long api, lua_State *L, int index);
-int                 lua_iswstring_dll   (unsigned long api, lua_State *L, int index);
 
 #define lua_pop_dll(api,L,n)                lua_settop_dll(api, L, -(n)-1)
 #define lua_isnil_dll(api,L,n)              (lua_type_dll(api, L, (n)) == LUA_TNIL)

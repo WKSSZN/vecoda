@@ -119,8 +119,6 @@ typedef int             (*luaL_loadbuffer_cdecl_t)      (lua_State *L, const cha
 typedef int             (*luaL_loadbufferx_cdecl_t)     (lua_State *L, const char *buff, size_t sz, const char *name, const char* mode);
 typedef int             (*luaL_loadfile_cdecl_t)        (lua_State *L, const char *fileName);
 typedef int             (*luaL_loadfilex_cdecl_t)       (lua_State *L, const char *fileName, const char* mode);
-typedef const lua_WChar* (*lua_towstring_cdecl_t)       (lua_State *L, int index);
-typedef int             (*lua_iswstring_cdecl_t)        (lua_State *L, int index);
 typedef const char*     (*lua_getupvalue_cdecl_t)       (lua_State *L, int funcindex, int n);
 typedef const char*     (*lua_setupvalue_cdecl_t)       (lua_State *L, int funcindex, int n);
 typedef void            (*lua_getfenv_cdecl_t)          (lua_State *L, int index);
@@ -223,8 +221,6 @@ struct LuaInterface
     luaL_loadbufferx_cdecl_t     luaL_loadbufferx_dll_cdecl;
     luaL_loadfile_cdecl_t        luaL_loadfile_dll_cdecl;
     luaL_loadfilex_cdecl_t       luaL_loadfilex_dll_cdecl;
-    lua_towstring_cdecl_t        lua_towstring_dll_cdecl;
-    lua_iswstring_cdecl_t        lua_iswstring_dll_cdecl;
     lua_getupvalue_cdecl_t       lua_getupvalue_dll_cdecl;
     lua_setupvalue_cdecl_t       lua_setupvalue_dll_cdecl;
     lua_getfenv_cdecl_t          lua_getfenv_dll_cdecl;
@@ -1276,32 +1272,6 @@ int luaL_loadfilex_dll(unsigned long api, lua_State* L, const char* fileName, co
 lua_State* luaL_newstate_dll(unsigned long api)
 {
     return g_interfaces[api].luaL_newstate_dll_cdecl();
-}
-
-const lua_WChar* lua_towstring_dll(unsigned long api, lua_State* L, int index)
-{
-    if (g_interfaces[api].lua_towstring_dll_cdecl != NULL)
-    {
-        return g_interfaces[api].lua_towstring_dll_cdecl(L, index);
-    }
-    else
-    {
-        // The application is not using LuaPlus, so just return NULL.
-        return NULL;
-    }
-}
-
-int lua_iswstring_dll(unsigned long api, lua_State* L, int index)
-{
-    if (g_interfaces[api].lua_iswstring_dll_cdecl != NULL)
-    {
-        return g_interfaces[api].lua_iswstring_dll_cdecl(L, index);
-    }
-    else
-    {
-        // The application is not using LuaPlus, so just return 0.
-        return 0;
-    }
 }
 
 const char* lua_getupvalue_dll(unsigned long api, lua_State *L, int funcindex, int n)
