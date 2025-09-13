@@ -78,7 +78,8 @@ attach模式启动后需要手动选择进程
 [bee.lua](https://github.com/actboy168/bee.lua)  
 [tinyxml](https://github.com/vmayoral/tinyxml)  
 [Lua-Simple-XML-Parser](https://github.com/Cluain/Lua-Simple-XML-Parser)  
-[json.lua](https://github.com/actboy168/json.lua)
+[json.lua](https://github.com/actboy168/json.lua)    
+[minhook](https://github.com/TsudaKageyu/minhook)
 
 ## 编译
 需要用到[`luamake`](https://github.com/actboy168/luamake)用来编译bee.lua  
