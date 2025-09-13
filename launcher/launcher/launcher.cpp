@@ -111,10 +111,10 @@ std::string injectDll(DWORD processId, const char* dllFileName) {
 	HMODULE kernelModule = GetModuleHandleA("Kernel32");
 	FARPROC loadLibraryProc = GetProcAddress(kernelModule, "LoadLibraryA");
 
-	DWORD exitCode;
+	DWORD exitCode = 0;
 	size_t length = strlen(fullFileName) + 1;
 	void* remoteString = VirtualAllocEx(process, NULL, length, MEM_COMMIT, PAGE_READWRITE);
-	DWORD numBytesWritten;
+	SIZE_T numBytesWritten;
 	WriteProcessMemory(process, remoteString, fullFileName, length, &numBytesWritten);
 	char* remoteFileName = static_cast<char*>(remoteString);
 	
@@ -130,8 +130,7 @@ std::string injectDll(DWORD processId, const char* dllFileName) {
 		CloseHandle(thread);
 	}
 
-	HMODULE dllHandle = reinterpret_cast<HMODULE>(exitCode);
-	if (dllHandle == NULL) {
+	if (exitCode == 0) {
 		success = false;
 		message = std::string("inject dll failed, dll path:") +fullFileName;
 	}
@@ -283,8 +282,8 @@ extern "C" {
 			return luaL_error(L, "Dll has not Inittialize Event");
 		}
 
-		unsigned int function;
-		eventChannel->ReadUInt32(function);
+		size_t function;
+		eventChannel->ReadUInt(function);
 
 		DWORD threadId;
 		HANDLE thread = CreateRemoteThread(processInfo.hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
@@ -360,8 +359,8 @@ extern "C" {
 				return luaL_error(L, "Dll has not Inittialize Event");
 			}
 
-			unsigned int function;
-			eventChannel->ReadUInt32(function);
+			size_t function;
+			eventChannel->ReadUInt(function);
 
 			DWORD threadId;
 			HANDLE thread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
@@ -405,8 +404,8 @@ extern "C" {
 			retachChannel.ReadUInt32(num);
 			for (size_t i = 0; i < num; i++)
 			{
-				unsigned int vm;
-				retachChannel.ReadUInt32(vm);
+				size_t vm;
+				retachChannel.ReadUInt(vm);
 				lua_pushnumber(L, vm);
 				lua_rawseti(L, vms, i + 1);
 			}
@@ -458,6 +457,17 @@ extern "C" {
 		}
 		return 0;
 	}
+
+	int channel_readUInt(lua_State* L) {
+		Channel* channel = reinterpret_cast<Channel*>(lua_touserdata(L, 1));
+		size_t value;
+		if (channel->ReadUInt(value)) {
+			lua_pushinteger(L, value);
+			return 1;
+		}
+		return 0;
+	}
+
 	int channel_nReadUInt32(lua_State* L) {
 		Channel* channel = (Channel*)lua_touserdata(L, 1);
 		unsigned int value;
@@ -467,7 +477,7 @@ extern "C" {
 		}
 		else {
 			lua_pushnil(L);
-			if (value == 0xffffffff) { // ╤о©╙а╛╫сак
+			if (value == 0xffffffff) { // О©╫о©О©╫О©╫О©╫О©╫О©╫О©╫О©╫
 				lua_pushboolean(L, 1);
 				return 2;
 			}
@@ -497,6 +507,12 @@ extern "C" {
 		Channel* channel = (Channel*)lua_touserdata(L, 1);
 		unsigned int value = luaL_checkinteger(L, 2);
 		lua_pushboolean(L, channel->WriteUInt32(value));
+		return 1;
+	}
+	int channel_writeUInt(lua_State* L) {
+		Channel* channel = (Channel*)lua_touserdata(L, 1);
+		size_t value = luaL_checkinteger(L, 2);
+		lua_pushboolean(L, channel->WriteUInt(value));
 		return 1;
 	}
 	int channel_writeString(lua_State* L) {
@@ -567,9 +583,11 @@ static luaL_Reg channelLibs[] =
 {
 	{"ReadUInt32", channel_readUInt32},
 	{"NReadUInt32", channel_nReadUInt32},
+	{"ReadUInt", channel_readUInt},
 	{"ReadString", channel_readString},
 	{"ReadBool", channel_readBool},
 	{"WriteUInt32", channel_writeUInt32},
+	{"WriteUInt", channel_writeUInt},
 	{"WriteString", channel_writeString},
 	{"WriteBool", channel_writeBool},
 	{"__gc", channel_gc},

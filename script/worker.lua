@@ -15,7 +15,7 @@ local message
 event.on('toggleBreakpoint', function(file, line)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_ToggleBreakpoint)
-    debugdata.CommandChannel:WriteUInt32(0) -- vm
+    debugdata.CommandChannel:WriteUInt(0) -- vm
     debugdata.CommandChannel:WriteUInt32(file)
     debugdata.CommandChannel:WriteUInt32(line)
 end)
@@ -37,7 +37,7 @@ end
 
 event.on('evaluate', function(expression, nvm, stackLevel)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Evaluate)
-    debugdata.CommandChannel:WriteUInt32(nvm)
+    debugdata.CommandChannel:WriteUInt(nvm)
     debugdata.CommandChannel:WriteString(expression or '')
     debugdata.CommandChannel:WriteUInt32(stackLevel)
     local success = debugdata.CommandChannel:ReadBool()
@@ -47,7 +47,7 @@ end)
 
 event.on('expand', function(scope, nvm, stackLevel, reference)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_ExpandTable)
-    debugdata.CommandChannel:WriteUInt32(nvm)
+    debugdata.CommandChannel:WriteUInt(nvm)
     debugdata.CommandChannel:WriteUInt32(scope)
     debugdata.CommandChannel:WriteUInt32(stackLevel)
     debugdata.CommandChannel:WriteUInt32(reference)
@@ -95,7 +95,7 @@ local function handleBreak(nvm, bp, tryStop)
     if not bp and not tryStop then
         message.output("stderr", exception.getErrorMessage())
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt32(nvm)
+        debugdata.CommandChannel:WriteUInt(nvm)
         return
     end
     if not bp and reason == 1 then
@@ -111,7 +111,7 @@ local function handleBreak(nvm, bp, tryStop)
         event.emit('stopped')
     else
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt32(nvm)
+        debugdata.CommandChannel:WriteUInt(nvm)
     end
 end
 
@@ -126,7 +126,7 @@ function m.update(msg)
         end
         return
     end
-    local nvm = assert(debugdata.EventChannel:ReadUInt32())
+    local nvm = assert(debugdata.EventChannel:ReadUInt())
     vm.setCurThread(nvm)
     if eventId == launcher.EventId_LoadScript then
         local name = debugdata.EventChannel:ReadString()
@@ -136,7 +136,7 @@ function m.update(msg)
             files.addFile(name, source)
         end
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_LoadDone)
-        debugdata.CommandChannel:WriteUInt32(nvm)
+        debugdata.CommandChannel:WriteUInt(nvm)
     elseif eventId == launcher.EventId_Message then
         local type = debugdata.EventChannel:ReadUInt32()
         local content = debugdata.EventChannel:ReadString()
@@ -196,7 +196,7 @@ end
 function m.stepOver(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepOver)
-    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+    debugdata.CommandChannel:WriteUInt(arg.threadId) -- vm
     message.event('continued', {
         threadId = arg.threadId,
         allThreadsContinued = false
@@ -207,7 +207,7 @@ end
 function m.stepInto(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepInto)
-    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+    debugdata.CommandChannel:WriteUInt(arg.threadId) -- vm
     message.event('continued', {
         threadId = arg.threadId,
         allThreadsContinued = false
@@ -218,7 +218,7 @@ end
 function m.stepOut(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_StepOut)
-    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+    debugdata.CommandChannel:WriteUInt(arg.threadId) -- vm
     message.event('continued', {
         threadId = arg.threadId,
         allThreadsContinued = false
@@ -229,7 +229,7 @@ end
 function m.continue(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+    debugdata.CommandChannel:WriteUInt(arg.threadId) -- vm
     message.event('continued', {
         threadId = arg.threadId,
         allThreadsContinued = false
@@ -240,7 +240,7 @@ end
 function m.pause(arg)
     if not debugdata then return end
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Break)
-    debugdata.CommandChannel:WriteUInt32(arg.threadId) -- vm
+    debugdata.CommandChannel:WriteUInt(arg.threadId) -- vm
 end
 
 return m

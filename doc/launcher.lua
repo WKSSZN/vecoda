@@ -95,6 +95,10 @@ local channel = {}
 ---@param value integer
 ---@return boolean 是否写入成功
 function channel:WriteUInt32(value)end
+---写入一个32/64位的无符号整数
+---@param value integer
+---@return boolean
+function channel:WriteUInt(value)end
 ---写入字符串
 ---@param value string
 ---@return boolean 是否写入成功
@@ -114,4 +118,7 @@ function channel:ReadBool()end
 ---@return integer|nil 如果有数据可读则返回读取的整数值，否则返回nil
 ---@return boolean 该管道是否关闭了
 function channel:NReadUInt32()end
+---读取一个32/64位的无符号整数
+---@return integer|nil
+function channel:ReadUInt()end
 return launcher
