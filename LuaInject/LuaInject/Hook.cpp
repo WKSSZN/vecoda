@@ -43,7 +43,7 @@ void* Hook(void* function, void* hook)
 void* HookFunction(void* function, void* hook, void* api, size_t functionArgNum)
 {
 	void* instance = InstanceFunction(hook, api, functionArgNum);
-	void* original;
+	void* original = NULL;
 	MH_CreateHook(function, instance, &original);
 	MH_EnableHook(function);
 	return original;
@@ -51,7 +51,6 @@ void* HookFunction(void* function, void* hook, void* api, size_t functionArgNum)
 
 void* InstanceFunction(void* function, void* upValue, size_t functionArgNum)
 {
-	functionArgNum;
 #ifdef WIN64
 	size_t rspSize = 32;
 	if (functionArgNum > 3)
@@ -59,16 +58,13 @@ void* InstanceFunction(void* function, void* upValue, size_t functionArgNum)
 		// functionArgNum+1= new function arg num
 		rspSize += (functionArgNum + 1 - 4) * 8; // arguments after 4th putting on the stack
 	}
-	rspSize = FIX16(rspSize) + 8;
+	rspSize = FIX16(rspSize);
 #else
 #endif
 	index = 0;
 #ifdef WIN64
 	//push rdi
 	code[index++] = 0x57;
-
-	// push rax
-	code[index++] = 0x50;
 
 	// sub rsp espSize
 	code[index++] = 0x48;
@@ -119,7 +115,7 @@ void* InstanceFunction(void* function, void* upValue, size_t functionArgNum)
 		}
 		else
 		{
-			size_t srcRsp = rspSize + 0x30 + (i - 4) * 8;
+			size_t srcRsp = rspSize + 0x28 + (i - 4) * 8;
 			size_t dstRsp = 0x20 + (i - 4) * 8;
 			// mov rax, qword ptr [rsp+srcRsp]
 			code[index++] = 0x48;
@@ -135,7 +131,7 @@ void* InstanceFunction(void* function, void* upValue, size_t functionArgNum)
 			{
 				code[index++] = 0x44;
 				code[index++] = 0x24;
-				code[index++] = (char)srcRsp;
+				code[index++] = (unsigned char)srcRsp;
 			}
 
 			// mov qword ptr [rsp+dstRsp]
@@ -189,8 +185,6 @@ void* InstanceFunction(void* function, void* upValue, size_t functionArgNum)
 		code[index++] = 0xc4;
 		code[index++] = (char)rspSize;
 	}
-	// pop rax
-	code[index++] = 0x58;
 
 	// pop rdi
 	code[index++] = 0x5f;
