@@ -71,7 +71,7 @@ export function getArchitectureByExe(executable : string) : string {
 
 export async function getArchitectureByProcessId(processId : string) {
     try {
-        const executable = await exec(`wmic process where processid=${processId} getExecutablePath`)
+        const executable = await exec(`wmic process where processid=${processId} get ExecutablePath`)
 
         const lines = executable.trim().split("\n").map(line => line.trim())
 
