@@ -41,7 +41,7 @@ class InitialConfigurationProvider implements vscode.DebugConfigurationProvider 
 class DescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
 	async createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): Promise<vscode.DebugAdapterDescriptor | null | undefined> {
 		let arch : string
-		if (session.configuration.type == 'attach') {
+		if (session.configuration.request == 'attach') {
 			arch = await getArchitectureByProcessId(session.configuration.processId)
 		} else {
 			arch = getArchitectureByExe(session.configuration.runtimeExecutable)
