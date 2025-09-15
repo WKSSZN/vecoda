@@ -1,46 +1,44 @@
+[中文README](./README_cn.md)
 # vecoda README
-
-把decode适配到vscode，并增加了一些功能，适配了lua5.3和lua5.4和64位程序
+Migrate decoda to vscode, and add some features. supports lua5.3, lua5.4 and x86/x64
 
 ## Features
-支持lua5.1-lua5.4    
+supports lua5.1-lua5.4    
 Launch  
 Attach  
-断点&多线程断点  
+breakpoint&multi threa breakpoint  
 stepin  
 stepover  
 stepout  
 pause    
-异常捕捉/筛选  
-变量查看  
-watch    
+exception capture/filter  
+looking at variables  
+watch expression   
 
 ## Requirements
 
-只支持windows
+windows only
 
-## 如何使用
-项目目录里没有.vscode/launch.json的话就按Ctrl+Shift+D打开debug pannel，Run and Debug下面有一行小字可以创建launch.json,
-点击之后会让选一个模板，就选Lua Debug，选完就创建好了
-### 需要配置的参数
+## How to use
+Needs `.vscode/launch.json` on workspace.
+### Configurations
 #### Launch
 "`rqeuest`"="launch"  
-`runtimeExecutable`: 可执行程序的路径  
-`cwd`: 工作目录，和decoda一个含义  
-`arg`: 程序启动的时候给的命令行参数  
-`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的程序，可以取不同的名字区分开来
+`runtimeExecutable`: the path to executable  
+`cwd`: working directory  
+`arg`: arguments for executable  
+`name`: debug instance name, shown on vscode debug pannel, can distinguish between attach debuggers
 
 #### Attach
 "`rqeuest`"="attach"  
-`cwd`: 工作目录，和decoda一个含义  
-`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的
+`cwd`: working directory  
+`name`: debug instance name
 
-attach模式启动后需要手动选择进程  
-不同进程的attach配置可能是一样的，建议取不同的`name`，这样同时attach的时候，就可以用名字区分开来了。
+It needs to pick a progress when starts `attach` debugging
 
-配置目录的时候可以用`{$workspaceFolder}`变量来代表vscode打开的工作目录
+`{workspaceFolder}`can be used in configuring `cwd` and `runtimeExecutable`, it means current opening work space
 
-#### 参考配置
+#### for example
 `.vscode\launch.json`
 ```json
 {
@@ -63,7 +61,7 @@ attach模式启动后需要手动选择进程
             "request": "attach",
             "cwd": "${workspaceFolder}\\Server"
         },
-        {//配置和上面只有name不一样，用来做区分
+        {//only name has different, for distinguish
             "type": "lua",
             "name": "AttachDBServ",
             "request": "attach",
@@ -73,7 +71,7 @@ attach模式启动后需要手动选择进程
 }
 ```
 
-## 用到的第三方代码
+## 3rd
 [decoda](https://github.com/unknownworlds/decoda)  
 [bee.lua](https://github.com/actboy168/bee.lua)  
 [tinyxml](https://github.com/vmayoral/tinyxml)  
@@ -81,67 +79,72 @@ attach模式启动后需要手动选择进程
 [json.lua](https://github.com/actboy168/json.lua)    
 [minhook](https://github.com/TsudaKageyu/minhook)
 
-## 编译
-需要用到[`luamake`](https://github.com/actboy168/luamake)用来编译bee.lua  
-还需要`vs2019`或者更高的版本
+## build
+needs[`luamake`](https://github.com/actboy168/luamake)to compile bee.lua  
+and`vs2019` or higher
 
-切换到`bee.lua`目录下，运行
+switch directory to`bee.lua` and run
 ```bat
 luamake
 ```
-然后用vs分别编译`launcher`和`LuaInject`两个项目。随后`luadebug.exe`、`launcher.dll`和`LuaInject.dll`出现在`bin`目录下。  
-启动`Run Extension`后打开新的vscode窗口，在里面配置lua的调试
 
-## 项目架构
-项目分成三个部分：`vscode扩展`(src目录)、`Debug Adapater`(script目录)、`LuaInject`(LuaInject目录)
+this command builds x64 version luadebug, if wants to build x86 version, add `--arch x86` after the command. If you have previously compiled for other architectures, remember to delete the build directory under the bee.lua directory   
+use vscode open`launcher`and`LuaInject`, then run build and then`luadebug.exe`、`launcher.dll`and`LuaInject.dll` whill copy to `bin`。  
+Remember to choose the right platform(x86/x64)    
+Run `Run Extension` on vscode
 
-`vscode扩展`部分进行扩展配置和`Debug Dapater`注册  
-`Debug Adapter`处理`vscode扩展`和`LuaInject`之间的消息  
-`LuaInject`注入lua程序，执行真正的断点和lua信息读取
+## Project structure
+The project has three parts：`vscode extension`(src directory)、`Debug Adapater`(script directory)、`LuaInject`(LuaInject directory)
 
-`bee.lua`目录是`Debug Adapter`的启动程序，提供一些运行时库，除此之外只是启动`main.lua`  
-`doc`目录是给`script`下的代码提供代码提示用  
-`launcher`目录编写`luancher.dll`的代码，作用相当于decoda的启动程序部分  
-`libs`提供一些lib文件
+`vscode extension` part configures extension and registers`Debug Dapater`  
+`Debug Adapter` handles the messages between `vscode extension` and `LuaInject`    
+`LuaInject` injects to lua program，do the real debugging and breakpoints
 
-### 启动流程
-vscode按扩展注册的启动Debug Adapter(bin/luadebug.exe)，在进行一些列初始化之后，vscode发送`launch`命令，带上在`launch.json`里配置的参数，随后`Debug Adapter`使用`launcher.dll`启动指定的程序，注入`LuaInject.dll`，hook lua代码，随后进行断点的设置。  
-更详细的交互流程参考[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，`Debug Adapter`和vscode之间通信协议用的是[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，使用stdio通信。
-## 版本
+`bee.lua` starts `Debug Adapter`, and supports some useful library, apart from that, it just launch `main.lua` on `bin`
+`doc` supports code completion for `scripts`   
+`launcher` project provides methods to launch program and inject `LuaInject`, and channles to communicate to `LuaInject`  
+`libs` provides libs
+
+### Startup
+vscode runs Debug Adapter(bin/$arch/luadebug.exe), and do some initializes, then vscode sends `launch` command with configurations writting on `launch.json`. `Debug Adapter` uses methods provided by`launcher` to launch target progress and inject `LuaInject.dll` to hook lua functions. After that, vscode sends breakpoint configurations and starts debugging.    
+More details about the process on[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，The protocol between`Debug Adapter` and vscode is[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，read and write on stdout。
+## Versions
+### 3.0.1
+Add english readme.
 ### 3.0.0
-适配64位程序，修复lua5.3+无法使用的bug
+Supports x64, fixs the but that lua5.3+ cannot use.
 ### 2.0.0
-适配lua5.3 lua5.4
+Supports lua5.3 lua5.4
 ### 1.1.5
-修复程序正常退出时，debug adapter没办法同步退出的bug
+fix bug when program exit normally, the debug adapter can't exit.
 ### 1.1.4
-支持多线程断点
+supports multi thread breakpoints
 ### 1.1.3
-使用新的变量管理方式，修复查看variables或者evaluate可能出现错误的bug    
-修复查看线程callstack时，所有线程都有一样的内容的bug
+use new variable management method.    
+fix bug when watching variables and evaluate.    
+fix bug all thread has same stask when watching callsack.
 ### 1.1.1
-修复Local和Upvalue在某些情况无法查看的bug  
-优化Local和Upvalue，保持原本的顺序
+fix bug Local and Upvalue can't watching sometimes.    
+Keeps the original order of Local and Upvalue.
 ### 1.1.0
-增加attach功能    
-修改logo     
-优化table的显示，按key排序，空table不用展开
+Supports attach    
+Change logo     
+Optmize display of table, empty table don't have to expand.
 ### 1.0.5
-修改logo  
-支持condition breakpoint, hit breakpoint, logMessage
+Change logo  
+Supports condition breakpoint, hit breakpoint and logMessage
 ### 1.0.4
-添加logo
-处理setExceptionBreakpoints，让异常可以选择是否断点
+Change logo
+Supports setExceptionBreakpoints
 ### 1.0.3
-修复变量查看导致崩溃的问题  
-增加代码仓库
+fix bug crash when watching varables  
+add repository
 ### 1.0.2
-降低vscode版本依赖到1.70
+downgrade vscode dep to 1.70
 ### 1.0.1
-重新编译LuaInject.dll
+rebuild LuaInject.dll
 ### 1.0.0
-
-初始版本，简单把decoda的功能迁移到vscode，支持debug adapter protocol
+Original version, simply migrates the functions from decoda to vscode, supports Debug Adapter Protocol.
 
 
 
