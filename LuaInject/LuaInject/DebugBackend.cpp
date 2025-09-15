@@ -267,11 +267,6 @@ DebugBackend::VirtualMachine* DebugBackend::AttachState(unsigned long api, lua_S
     }
 
     CriticalSectionLock lock(m_criticalSection);
-    auto it = m_stateToVm.find(L);
-    if (it != m_stateToVm.end())
-    {
-        return it->second;
-    }
 
     // Check if the virtual machine is aleady in our list. This happens
     // if we're attaching this virtual machine implicitly through lua_call

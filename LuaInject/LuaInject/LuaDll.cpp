@@ -132,8 +132,8 @@ typedef void            (*lua_rotate_cdecl_t)           (lua_State* L, int, int)
 typedef void*           (*lua_newuserdatauv_cdecl_t)    (lua_State* L, size_t, int);
 
 typedef HMODULE         (WINAPI *LoadLibraryExW_t)              (LPCWSTR lpFileName, HANDLE hFile, DWORD dwFlags);
-typedef ULONG           (WINAPI *LdrLockLoaderLock_t)           (ULONG flags, PULONG disposition, PULONG cookie);
-typedef LONG            (WINAPI *LdrUnlockLoaderLock_t)         (ULONG flags, ULONG cookie);
+typedef NTSTATUS           (WINAPI *LdrLockLoaderLock_t)           (ULONG flags, ULONG* disposition, ULONG_PTR* cookie);
+typedef NTSTATUS            (WINAPI *LdrUnlockLoaderLock_t)         (ULONG flags, ULONG_PTR cookie);
 
 
 /**
@@ -208,6 +208,7 @@ struct LuaInterface
     lua_callk_cdecl_t            lua_callk_dll_cdecl;
     lua_pcall_cdecl_t            lua_pcall_dll_cdecl;
     lua_pcallk_cdecl_t           lua_pcallk_dll_cdecl;
+    lua_pcallk_530_cdecl_t       lua_pcallk_530_dll_cdecl;
     lua_newtable_cdecl_t         lua_newtable_dll_cdecl;
     lua_createtable_cdecl_t      lua_createtable_dll_cdecl;
     lua_next_cdecl_t             lua_next_dll_cdecl;
@@ -671,7 +672,7 @@ void* lua_newuserdata_dll(unsigned long api, lua_State* L, size_t size)
 
 void EnableIntercepts(bool enableIntercepts)
 {
-    int value = reinterpret_cast<int>(TlsGetValue(g_disableInterceptIndex));
+    ptrdiff_t value = reinterpret_cast<ptrdiff_t>(TlsGetValue(g_disableInterceptIndex));
     if (enableIntercepts)
     {
         --value;
@@ -685,7 +686,7 @@ void EnableIntercepts(bool enableIntercepts)
 
 bool GetAreInterceptsEnabled()
 {
-    int value = reinterpret_cast<int>(TlsGetValue(g_disableInterceptIndex));
+    ptrdiff_t value = reinterpret_cast<ptrdiff_t>(TlsGetValue(g_disableInterceptIndex));
     return value <= 0;
 }
 
@@ -1105,7 +1106,7 @@ int lua_tointeger_dll(unsigned long api, lua_State* L, int index)
     if (g_interfaces[api].lua_tointegerx_dll_cdecl != NULL)
     {
         // Lua 5.2 implementation.
-        return g_interfaces[api].lua_tointegerx_dll_cdecl(L, index, NULL);
+        return static_cast<int>(g_interfaces[api].lua_tointegerx_dll_cdecl(L, index, NULL));
     }
     if (g_interfaces[api].lua_tointegerx_530_dll_cdecl != NULL)
     {
@@ -1178,7 +1179,14 @@ void lua_call_dll(unsigned long api, lua_State* L, int nargs, int nresults)
 
 int lua_pcallk_dll(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, int ctx, lua_CFunction k)
 {
-    return g_interfaces[api].lua_pcallk_dll_cdecl(L, nargs, nresults, errfunc, ctx, k);
+    if (g_interfaces[api].lua_pcallk_530_dll_cdecl != NULL)
+    {
+        return g_interfaces[api].lua_pcallk_530_dll_cdecl(L, nargs, nresults, errfunc, ctx, reinterpret_cast<lua_KFunction>(k));
+    }
+    else
+    {
+        return g_interfaces[api].lua_pcallk_dll_cdecl(L, nargs, nresults, errfunc, ctx, k);
+    }
 }
 
 int lua_pcall_dll(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc)
@@ -1187,6 +1195,10 @@ int lua_pcall_dll(unsigned long api, lua_State* L, int nargs, int nresults, int 
     if (g_interfaces[api].lua_pcallk_dll_cdecl != NULL)
     {
         return lua_pcallk_dll(api, L, nargs, nresults, errfunc, 0, NULL);
+    }
+    else if (g_interfaces[api].lua_pcallk_530_dll_cdecl != NULL)
+    { // Lua 5.3+
+        return g_interfaces[api].lua_pcallk_530_dll_cdecl(L, nargs, nresults, errfunc, 0, NULL);
     }
     // Lua 5.1 and earlier.
     return g_interfaces[api].lua_pcall_dll_cdecl(L, nargs, nresults, errfunc);
@@ -1350,7 +1362,7 @@ HMODULE WINAPI LoadLibraryExW_intercept(LPCWSTR fileName, HANDLE hFile, DWORD dw
     // in the case where Dll initialization acquires the loader lock and calls LoadLibrary
     // while another thread is inside PostLoadLibrary.
 
-    ULONG cookie;
+    ULONG_PTR cookie;
 
     if (LdrLockLoaderLock_dll   != NULL &&
         LdrUnlockLoaderLock_dll != NULL)
@@ -1440,6 +1452,26 @@ int lua_pcallk_intercept(unsigned long api, lua_State* L, int nargs, int nresult
     else
     {
         result = lua_pcallk_dll(api, L, nargs, nresults, errfunc, ctx, k);
+    }
+
+    return result;
+
+}
+
+int lua_pcallk_530_intercept(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, lua_KContext ctx, lua_KFunction k)
+{
+
+    int result;
+
+    DebugBackend::Get().AttachState(api, L);
+
+    if (false)
+    {
+        result = DebugBackend::Get().Call(api, L, nargs, nresults, errfunc);
+    }
+    else
+    {
+        result = lua_pcallk_dll(api, L, nargs, nresults, errfunc, static_cast<int>(ctx), reinterpret_cast<lua_CFunction>(k));
     }
 
     return result;
@@ -1839,15 +1871,15 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
         }
 
     #define HOOK_FUNCTION(function)                                                                                             \
-        if (luaInterface.function##_dll_cdecl != NULL)                                                                          \
+        if (g_interfaces[api].function##_dll_cdecl != NULL)                                                                          \
         {                                                                                                                       \
             auto original = luaInterface.function##_dll_cdecl;                                                                 \
-            luaInterface.function##_dll_cdecl = (HookFunction(original, function##_intercept, api));        \
+            g_interfaces[api].function##_dll_cdecl = (HookFunction(original, function##_intercept, api));        \
         }
 
     LuaInterface luaInterface = { 0 };
 
-    unsigned long api = g_interfaces.size();
+    unsigned long api = static_cast<unsigned long>(g_interfaces.size());
 
     bool report = false;
 
@@ -2040,10 +2072,6 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
     GET_FUNCTION_OPTIONAL(luaL_loadfile);
     GET_FUNCTION_OPTIONAL(luaL_loadfilex);
 
-    // These functions only exists in LuaPlus.
-    GET_FUNCTION_OPTIONAL(lua_towstring);
-    GET_FUNCTION_OPTIONAL(lua_iswstring);
-
     // Hook the functions we need to intercept calls to.
 
     if (luaInterface.version == 500)
@@ -2086,27 +2114,11 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
 
         luaInterface.lua_tointegerx_530_dll_cdecl = reinterpret_cast<lua_tointegerx_530_cdecl_t>(luaInterface.lua_tointegerx_dll_cdecl);
         luaInterface.lua_tointegerx_dll_cdecl = NULL;
+
+        luaInterface.lua_pcallk_530_dll_cdecl = reinterpret_cast<lua_pcallk_530_cdecl_t>(luaInterface.lua_pcallk_dll_cdecl);
+        luaInterface.lua_pcallk_dll_cdecl = NULL;
     }
 
-    HOOK_FUNCTION(lua_open);
-    HOOK_FUNCTION(lua_open_500);
-    HOOK_FUNCTION(lua_newstate);
-    HOOK_FUNCTION(lua_close);
-    HOOK_FUNCTION(lua_newthread);
-    HOOK_FUNCTION(lua_pcall);
-    HOOK_FUNCTION(lua_pcallk);
-    HOOK_FUNCTION(lua_call);
-    HOOK_FUNCTION(lua_callk);
-    HOOK_FUNCTION(lua_load);
-    HOOK_FUNCTION(lua_load_510);
-    HOOK_FUNCTION(luaL_newmetatable);
-    HOOK_FUNCTION(lua_sethook);
-    HOOK_FUNCTION(lua_sethook_530);
-
-    HOOK_FUNCTION(luaL_loadbuffer);
-    HOOK_FUNCTION(luaL_loadfile);
-    HOOK_FUNCTION(luaL_loadfilex);
-    HOOK_FUNCTION(luaL_newstate);
 
 #ifdef VERBOSE
     DebugBackend::Get().Message("Found all necessary Lua functions");
@@ -2119,6 +2131,28 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
     luaInterface.HookHandler   = (lua_Hook)InstanceFunction(HookHandler, api);
 
     g_interfaces.push_back( luaInterface );
+
+    
+    HOOK_FUNCTION(lua_open);
+    HOOK_FUNCTION(lua_open_500);
+    HOOK_FUNCTION(lua_newstate);
+    HOOK_FUNCTION(lua_close);
+    HOOK_FUNCTION(lua_newthread);
+    HOOK_FUNCTION(lua_pcall);
+    HOOK_FUNCTION(lua_pcallk);
+    HOOK_FUNCTION(lua_pcallk_530);
+    HOOK_FUNCTION(lua_call);
+    HOOK_FUNCTION(lua_callk);
+    HOOK_FUNCTION(lua_load);
+    HOOK_FUNCTION(lua_load_510);
+    HOOK_FUNCTION(luaL_newmetatable);
+    HOOK_FUNCTION(lua_sethook);
+    HOOK_FUNCTION(lua_sethook_530);
+
+    HOOK_FUNCTION(luaL_loadbuffer);
+    HOOK_FUNCTION(luaL_loadfile);
+    HOOK_FUNCTION(luaL_loadfilex);
+    HOOK_FUNCTION(luaL_newstate);
 
     if (!g_loadedLuaFunctions)
     {
@@ -2174,13 +2208,12 @@ bool GetModuleImports(HANDLE hProcess, HMODULE hModule, std::vector<std::string>
     }
 
     // Convert imports RVA to a usable pointer
-    PIMAGE_IMPORT_DESCRIPTOR pImportDesc = MAKE_PTR( PIMAGE_IMPORT_DESCRIPTOR,
-                                                    hModule, importRVA );
+    PIMAGE_IMPORT_DESCRIPTOR pImportDesc = (PIMAGE_IMPORT_DESCRIPTOR)((BYTE*)hModule + importRVA);
 
     // Iterate through each import descriptor, and redirect if appropriate
     while ( pImportDesc->FirstThunk )
     {
-        PSTR pszImportModuleName = MAKE_PTR( PSTR, hModule, pImportDesc->Name);
+        const char* pszImportModuleName = (const char*)((BYTE*)hModule + pImportDesc->Name);
         imports.push_back(pszImportModuleName);
         pImportDesc++;  // Advance to next import descriptor
     }
@@ -2312,7 +2345,7 @@ BOOL CALLBACK FindSymbolsCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID
 bool ScanForSignature(DWORD64 start, DWORD64 length, const char* signature)
 {
 
-    unsigned int signatureLength = strlen(signature);
+    unsigned int signatureLength = static_cast<unsigned int>(strlen(signature));
 
     for (DWORD64 i = start; i < start + length - signatureLength; ++i)
     {
@@ -2610,7 +2643,7 @@ bool InstallLuaHooker(HINSTANCE hInstance, const char* symbolsDirectory)
     HookLoadLibrary();
 
     // Avoid deadlock if a new DLL is loaded during this function.
-    ULONG cookie;
+    ULONG_PTR cookie;
 
     if (LdrLockLoaderLock_dll   != NULL &&
         LdrUnlockLoaderLock_dll != NULL)

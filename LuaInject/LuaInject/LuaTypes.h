@@ -125,8 +125,7 @@ extern "C"
 	typedef int (*lua_CFunction) (lua_State *L);
 	typedef const char * (*lua_Reader) (lua_State *L, void *ud, size_t *sz);
 
-#define LUA_KCONTEXT	int
-	typedef LUA_KCONTEXT lua_KContext;
+	typedef ptrdiff_t lua_KContext;
 	typedef int (*lua_KFunction) (lua_State* L, int status, lua_KContext ctx);
 } // extern "C"
 

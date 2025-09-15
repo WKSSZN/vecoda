@@ -8,11 +8,19 @@ extern "C" {
 #include <string.h>
 #include "Channel.h"
 
+#if defined(__i386__) || defined(_M_IX86)
+using Address = unsigned long;
+#define PC(a) (a.Eip)
+#else
+using Address = DWORD64;
+#define PC(a) (a.Rip)
+#endif
+
 struct ExeInfo
 {
-	unsigned long entryPoint;
+	Address entryPoint;
 	bool managed;
-	bool i386;
+	WORD arch;
 };
 
 enum EventId
@@ -63,7 +71,7 @@ bool getExeInfo(const char* fileName, ExeInfo& info)
 		}
 	}
 	info.entryPoint = loadedImage.FileHeader->OptionalHeader.AddressOfEntryPoint;
-	info.i386 = loadedImage.FileHeader->FileHeader.Machine == IMAGE_FILE_MACHINE_I386;
+	info.arch = loadedImage.FileHeader->FileHeader.Machine;
 	UnMapAndLoad(&loadedImage);
 	return true;
 }
@@ -186,9 +194,15 @@ extern "C" {
 		if (!getExeInfo(exeFileName, exeInfo) || exeInfo.entryPoint == 0) {
 			return luaL_error(L, "Error: The entry point for the application could not be located");
 		}
-		if (!exeInfo.i386) {
+#if defined(__i386__) || defined(_M_IX86)
+		if (exeInfo.arch != IMAGE_FILE_MACHINE_I386) {
 			return luaL_error(L, "Error: Debugging 64-bit applications is not supported");
 		}
+#else
+		if (exeInfo.arch != IMAGE_FILE_MACHINE_AMD64) {
+			return luaL_error(L, "Error: Debugging 32-bit applications is not supported");
+		}
+#endif
 
 		DWORD flags = DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS | CREATE_NEW_CONSOLE;
 
@@ -197,7 +211,7 @@ extern "C" {
 		}
 
 		if (!exeInfo.managed) {
-			unsigned long entryPoint = exeInfo.entryPoint;
+			Address entryPoint = exeInfo.entryPoint;
 
 			BYTE breakPointData;
 			bool done = false;
@@ -205,7 +219,7 @@ extern "C" {
 			while (!done) {
 				DEBUG_EVENT debugEvent;
 				WaitForDebugEvent(&debugEvent, INFINITE);
-
+				
 				DWORD continueStatus = DBG_EXCEPTION_NOT_HANDLED;
 				if (debugEvent.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
 					if (debugEvent.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP ||
@@ -215,11 +229,11 @@ extern "C" {
 
 						GetThreadContext(processInfo.hThread, &context);
 
-						if (context.Eip == entryPoint + 1) {
+						if (PC(context) == entryPoint + 1) {
 							setBreakPoint(processInfo.hProcess, (LPVOID)entryPoint, false, &breakPointData);
 							done = true;
 
-							--context.Eip;
+							--PC(context);
 							SetThreadContext(processInfo.hThread, &context);
 							SuspendThread(processInfo.hThread);
 						}
@@ -477,7 +491,7 @@ extern "C" {
 		}
 		else {
 			lua_pushnil(L);
-			if (value == 0xffffffff) { // О©╫о©О©╫О©╫О©╫О©╫О©╫О©╫О©╫
+			if (value == 0xffffffff) { // ╤о©╙а╛╫сак
 				lua_pushboolean(L, 1);
 				return 2;
 			}

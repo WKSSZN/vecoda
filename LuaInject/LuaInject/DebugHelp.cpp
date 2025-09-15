@@ -25,6 +25,12 @@ along with Decoda.  If not, see <http://www.gnu.org/licenses/>.
 #include <psapi.h>
 #include <assert.h>
 
+#if defined(__i386__) || defined(_M_IX86)
+#define PC(a) (a.Eip)
+#else
+#define PC(a) (a.Rip)
+#endif
+
 struct GetCStackData
 {
     HANDLE                      hThread;
@@ -126,12 +132,8 @@ DWORD WINAPI GetCStackThread(LPVOID p)
         STACKFRAME64 stackFrame;
         ZeroMemory(&stackFrame, sizeof(stackFrame));
 
-        stackFrame.AddrPC.Offset    = context.Eip;
-        stackFrame.AddrStack.Offset = context.Esp;
-        stackFrame.AddrFrame.Offset = context.Ebp;
+        stackFrame.AddrPC.Offset    = PC(context);
         stackFrame.AddrPC.Mode      = AddrModeFlat;
-        stackFrame.AddrStack.Mode   = AddrModeFlat;
-        stackFrame.AddrFrame.Mode   = AddrModeFlat;
 
         while (data->stackSize < data->maxStackSize)
         {
@@ -206,12 +208,8 @@ unsigned int GetCStack(HANDLE hThread, STACKFRAME64 stack[], unsigned int maxSta
             STACKFRAME64 stackFrame;
             ZeroMemory(&stackFrame, sizeof(stackFrame));
 
-            stackFrame.AddrPC.Offset    = context.Eip;
-            stackFrame.AddrStack.Offset = context.Esp;
-            stackFrame.AddrFrame.Offset = context.Ebp;
+            stackFrame.AddrPC.Offset    = PC(context);
             stackFrame.AddrPC.Mode      = AddrModeFlat;
-            stackFrame.AddrStack.Mode   = AddrModeFlat;
-            stackFrame.AddrFrame.Mode   = AddrModeFlat;
 
             while (stackSize < maxStackSize)
             {

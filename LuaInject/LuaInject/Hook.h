@@ -50,7 +50,7 @@ TargetFuncPtr<R, Args...> HookFunction(TargetFuncPtr<R, Args...> function, Targe
 	return reinterpret_cast<TargetFuncPtr<R, Args...>>(original);
 }
 
-#ifdef WIN32
+#if defined(__i386__) || defined(_M_IX86)
 template<typename R, typename... Args>
 using TargetStdFuncPtr = R(__stdcall*)(Args...);
 

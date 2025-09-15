@@ -7,3 +7,4 @@ node_modules
 **/Debug/*
 **/Release/*
 yarn.lock
+libs/luadebug/*

@@ -59,6 +59,12 @@ lm:copy "copy_script" {
     deps = "luadebug",
 }
 
+lm:copy "copy_lib" {
+    inputs = "$obj/bootstrap.lib",
+    outputs = "../libs/luadebug/".. (lm.arch == 'x86' and 'x86' or 'x64') .. "/bootstrap.lib",
+    deps = "luadebug"
+}
+
 if not lm.notest then
     local exe = lm.os == "windows" and ".exe" or ""
     local tests = {}
@@ -78,7 +84,7 @@ if not lm.notest then
     }
     lm:build "test" {
         rule = "test",
-        deps = { "luadebug", "copy_script" },
+        deps = { "luadebug", "copy_script", "copy_lib" },
         inputs = tests,
         outputs = "$obj/test.stamp",
     }
