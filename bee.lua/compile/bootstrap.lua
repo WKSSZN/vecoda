@@ -36,7 +36,7 @@ lm:src "source_bootstrap" {
 }
 
 lm:executable "luadebug" {
-    bindir = "../bin",
+    bindir = "../bin/" .. (lm.arch == 'x86' and 'x86' or 'x64'),
     deps = {
         "source_bee",
         "source_lua",
@@ -55,7 +55,7 @@ lm:executable "luadebug" {
 
 lm:copy "copy_script" {
     inputs = "bootstrap/main.lua",
-    outputs = "../bin/main.lua",
+    outputs = "../bin/" .. (lm.arch == 'x86' and 'x86' or 'x64') .. "/main.lua",
     deps = "luadebug",
 }
 
@@ -72,7 +72,7 @@ if not lm.notest then
     table.sort(tests)
 
     lm:rule "test" {
-        args = { "../bin/luadebug"..exe, "@test/test.lua", "--touch", "$out" },
+        args = { "../bin/" .. (lm.arch == 'x86' and 'x86' or 'x64') .. "/luadebug" ..exe, "@test/test.lua", "--touch", "$out" },
         description = "Run test.",
         pool = "console",
     }

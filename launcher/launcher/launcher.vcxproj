@@ -73,22 +73,22 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(SolutionDir)..\bee.lua\build\lua54</IncludePath>
-    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\$(PlatformShortName)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(SolutionDir)..\bee.lua\build\lua54</IncludePath>
-    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\$(PlatformShortName)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(SolutionDir)..\bee.lua\build\lua54</IncludePath>
-    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\$(PlatformShortName)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(SolutionDir)..\bee.lua\build\lua54</IncludePath>
-    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(SolutionDir)..\bee.lua\build\obj;$(SolutionDir)..\libs\dbghelp\$(PlatformShortName)\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -103,7 +103,7 @@
       <AdditionalDependencies>imagehlp.lib;bootstrap.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin"</Command>
+      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin\$(PlatformShortName)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -123,7 +123,7 @@
       <AdditionalDependencies>imagehlp.lib;bootstrap.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin"</Command>
+      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin\$(PlatformShortName)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -139,7 +139,7 @@
       <AdditionalDependencies>imagehlp.lib;bootstrap.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin"</Command>
+      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin\$(PlatformShortName)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -159,7 +159,7 @@
       <AdditionalDependencies>imagehlp.lib;bootstrap.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin"</Command>
+      <Command>xcopy /y "$(TargetPath)" "$(SolutionDir)..\bin\$(PlatformShortName)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

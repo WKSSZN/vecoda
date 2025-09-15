@@ -1,6 +1,6 @@
 local root; do
     local pattern = "[/][^/]+"
-    root = package.cpath:match("(.+)"..pattern..pattern.."$")
+    root = package.cpath:match("(.+)"..pattern..pattern..pattern.."$")
 end
 package.path = root .. "/script/?.lua"
 for i = 1, #arg do

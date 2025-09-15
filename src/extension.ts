@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path'
 import { pick } from './pickProcess';
+import { getArchitectureByExe, getArchitectureByProcessId } from './getArchi';
 let extensionDirectory:string
 
 export function activate(context: vscode.ExtensionContext) {
@@ -38,8 +39,17 @@ class InitialConfigurationProvider implements vscode.DebugConfigurationProvider 
 }
 
 class DescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
-	createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
-		const debugbackend = path.join(extensionDirectory, "bin", "luadebug.exe")
+	async createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): Promise<vscode.DebugAdapterDescriptor | null | undefined> {
+		let arch : string
+		if (session.configuration.type == 'attach') {
+			arch = await getArchitectureByProcessId(session.configuration.processId)
+		} else {
+			arch = getArchitectureByExe(session.configuration.runtimeExecutable)
+		}
+		// if (arch === '') {
+		// 	arch = "x86"
+		// }
+		const debugbackend = path.join(extensionDirectory, "bin", arch, "luadebug.exe")
 		return new vscode.DebugAdapterExecutable(debugbackend)
 	}
 
