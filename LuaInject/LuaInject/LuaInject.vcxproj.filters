@@ -48,9 +48,6 @@
     <ClInclude Include="Protocol.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="StdCall.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="StlUtility.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -93,9 +90,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="StdCall.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="StlUtility.cpp">
