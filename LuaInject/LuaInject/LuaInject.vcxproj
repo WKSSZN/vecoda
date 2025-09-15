@@ -30,7 +30,6 @@
     <ClInclude Include="LuaDll.h" />
     <ClInclude Include="LuaTypes.h" />
     <ClInclude Include="Protocol.h" />
-    <ClInclude Include="StdCall.h" />
     <ClInclude Include="StlUtility.h" />
     <ClInclude Include="tinystr.h" />
     <ClInclude Include="tinyxml.h" />
@@ -47,7 +46,6 @@
     <ClCompile Include="LuaCheckStack.cpp" />
     <ClCompile Include="LuaDll.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="StdCall.cpp" />
     <ClCompile Include="StlUtility.cpp" />
     <ClCompile Include="tinystr.cpp" />
     <ClCompile Include="tinyxml.cpp" />
