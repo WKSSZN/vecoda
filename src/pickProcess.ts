@@ -11,7 +11,7 @@ async function WimcProcess(name: string | undefined, processEntries: ProcessEntr
     const lines = processes.split(os.EOL)
     let process: { [key: string]: string } = {}
     for (let line of lines) {
-        const res = line.match(/^(.*)=\s*(.*)\s*$/);
+        const res = line.match(/^(.*?)=\s*(.*)\s*$/);
         if (res) {
             process[res[1]] = res[2]
         }
