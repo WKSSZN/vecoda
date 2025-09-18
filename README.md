@@ -109,6 +109,8 @@ The project has three parts：`vscode extension`(src directory)、`Debug Adapate
 vscode runs Debug Adapter(bin/$arch/luadebug.exe), and do some initializes, then vscode sends `launch` command with configurations writting on `launch.json`. `Debug Adapter` uses methods provided by`launcher` to launch target progress and inject `LuaInject.dll` to hook lua functions. After that, vscode sends breakpoint configurations and starts debugging.    
 More details about the process on[Overview](https://microsoft.github.io/debug-adapter-protocol/overview)，The protocol between`Debug Adapter` and vscode is[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/specification)，read and write on stdout。
 ## Versions
+### 3.0.2
+Modify description of extension.
 ### 3.0.1
 Add english readme.
 ### 3.0.0

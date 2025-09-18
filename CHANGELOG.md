@@ -1,4 +1,6 @@
 # Change Log
+### 3.0.2
+修改package.json的description。
 ### 3.0.1
 添加英文README
 ### 3.0.0

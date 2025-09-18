@@ -1,8 +1,8 @@
 {
 	"name": "vecoda",
 	"displayName": "vecoda",
-	"description": "use decoda in vscode",
-	"version": "3.0.1",
+	"description": "lua debug for vscode on windows. Modified based on Decoda, supporting Lua5.1-5.4, x86/64",
+	"version": "3.0.2",
 	"author": {
 		"name": "wzn"
 	},
