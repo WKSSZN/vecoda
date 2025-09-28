@@ -101,7 +101,7 @@ local function handleBreak(nvm, bp, tryStop)
     if not bp and reason == 1 then
         bp = breakpoint.getBreakpoint(stacks[1].fileId, stacks[1].line)
     end
-    if not bp or breakpoint.exec(bp, stacks[1].id) then
+    if numStackFrames ~= 0 and (not bp or breakpoint.exec(bp, stacks[1].id)) then
         vm.setStacks(stacks)
         message.event('stopped', {
             reason = breakReasons[reason],
