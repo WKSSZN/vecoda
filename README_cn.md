@@ -28,12 +28,14 @@ watch
 `runtimeExecutable`: 可执行程序的路径  
 `cwd`: 工作目录，和decoda一个含义  
 `arg`: 程序启动的时候给的命令行参数  
-`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的程序，可以取不同的名字区分开来
+`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的程序，可以取不同的名字区分开来    
+`encoding`：可选，字符串变量的编码格式
 
 #### Attach
 "`rqeuest`"="attach"  
 `cwd`: 工作目录，和decoda一个含义  
-`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的
+`name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的    
+`encoding`：可选，字符串变量的编码格式
 
 attach模式启动后需要手动选择进程  
 不同进程的attach配置可能是一样的，建议取不同的`name`，这样同时attach的时候，就可以用名字区分开来了。

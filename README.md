@@ -27,12 +27,14 @@ Needs `.vscode/launch.json` on workspace.
 `runtimeExecutable`: the path to executable  
 `cwd`: working directory  
 `arg`: arguments for executable  
-`name`: debug instance name, shown on vscode debug pannel, can distinguish between attach debuggers
+`name`: debug instance name, shown on vscode debug pannel, can distinguish between attach debuggers    
+`encoding`: optional,  encoding of variables
 
 #### Attach
 "`rqeuest`"="attach"  
 `cwd`: working directory  
-`name`: debug instance name
+`name`: debug instance name    
+`encoding`: optional,  encoding of variables
 
 It needs to pick a progress when starts `attach` debugging
 

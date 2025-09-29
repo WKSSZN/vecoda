@@ -1,4 +1,8 @@
 # Change Log
+## 3.0.4
+Supports configuration of encoding of variables
+
+支持配置字符串变量的编码格式
 ## 3.0.3
 Remove `Versions` section from README, and add add english to CHANGELOG.    
 fix bug process blocked when there is no stack frames on error.
