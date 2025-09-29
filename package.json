@@ -60,6 +60,15 @@
 							"runtimeExecutable": {
 								"type": "string",
 								"markdownDescription": "可执行程序目录"
+							},
+							"encoding" : {
+								"type": "string",
+								"markdownDescription": "字符串编码格式",
+								"default" : "utf8",
+								"enum": [
+									"utf8",
+									"gbk"
+								]
 							}
 						}
 					},
@@ -69,6 +78,15 @@
 								"default": "${workspaceFolder}",
 								"type": "string",
 								"markdownDescription": "工作目录"
+							},
+							"encoding" : {
+								"type": "string",
+								"markdownDescription": "字符串编码格式",
+								"default" : "utf8",
+								"enum": [
+									"utf8",
+									"gbk"
+								]
 							}
 						}
 					}

@@ -6,6 +6,7 @@ local worker = require 'worker'
 local variables = require 'variables'
 local exception = require 'exception'
 local breakpoint = require 'breakpoint'
+local encoding = require 'encoding'
 ---@type LuaDebugMessage
 local message
 local handlers = {}
@@ -55,6 +56,7 @@ function handlers.launch(req)
         return
     end
     worker.init(debugData)
+    encoding.setEncoding(req.arguments.encoding or "")
     message.success(req)
 end
 
@@ -72,6 +74,7 @@ function handlers.attach(req)
     end
     files.init(message, cwd)
     worker.init(debugData)
+    encoding.setEncoding(req.arguments.encoding or "")
     message.success(req)
     if predata then
         for _, nvm in ipairs(predata.vms) do
@@ -228,6 +231,7 @@ function m.init(msg)
     vm.init(msg)
     variables.init(msg)
     breakpoint.init(msg)
+    encoding.init(msg)
 end
 
 m.getSeq = getSeq

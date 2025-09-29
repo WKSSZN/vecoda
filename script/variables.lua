@@ -1,6 +1,6 @@
 local event = require 'event'
-local xmlSimple = require 'xmlSimple'
 local files = require 'files'
+local encoding = require 'encoding'
 ---@type LuaDebugMessage
 local message
 local variables = {}
@@ -74,6 +74,8 @@ local function parseVariable(root, vm, stackLevel)
             variable.type = valuetype
             variable.value = value
         end
+        variable.name = encoding.toUtf8(variable.name)
+        variable.value = encoding.toUtf8(variable.value)
         values[#values + 1] = variable
     end
     return values
@@ -167,7 +169,7 @@ function m.evaluate(expression, frameId)
         --     v = tonumber(v)
         -- end
         return {
-            result = v,
+            result = encoding.toUtf8(v),
             type = ntype,
             variablesReference = 0
         }
