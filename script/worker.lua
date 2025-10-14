@@ -132,9 +132,12 @@ function m.update(msg)
         local name = debugdata.EventChannel:ReadString()
         local source = debugdata.EventChannel:ReadString()
         local codeState = debugdata.EventChannel:ReadUInt32()
-        if codeState == 0 then
-            files.addFile(name, source)
+        if codeState == 1 then
+            source = "<unavailable>"
+        elseif codeState == 2 then
+            source = "<binary>"
         end
+        files.addFile(name, source)
         debugdata.CommandChannel:WriteUInt32(launcher.CommandId_LoadDone)
         debugdata.CommandChannel:WriteUInt(nvm)
     elseif eventId == launcher.EventId_Message then
