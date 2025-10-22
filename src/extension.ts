@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 class ResolveConfigurationProvider implements vscode.DebugConfigurationProvider {
 	async resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, debugConfiguration: vscode.DebugConfiguration, token?: vscode.CancellationToken): Promise<vscode.DebugConfiguration | null | undefined> {
-		if (debugConfiguration.request == "attach") {
+		if (debugConfiguration.request == "attach" && debugConfiguration.address === undefined) {
 			debugConfiguration.processId = await pick()
 			if (debugConfiguration.processId == "") {
 				return
@@ -42,13 +42,25 @@ class DescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
 	async createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): Promise<vscode.DebugAdapterDescriptor | null | undefined> {
 		let arch : string
 		if (session.configuration.request == 'attach') {
-			arch = await getArchitectureByProcessId(session.configuration.processId)
+			if (session.configuration.processId !== undefined) {
+				arch = await getArchitectureByProcessId(session.configuration.processId)
+			} else if (session.configuration.address !== undefined) {
+				arch = "x64"
+			} else {
+				throw Error("attach need processId or address configuration")
+			}
 		} else {
 			arch = getArchitectureByExe(session.configuration.runtimeExecutable)
 		}
 		// if (arch === '') {
 		// 	arch = "x86"
 		// }
+		if (arch == '') {
+			throw Error("unknow arch")
+		}
+		if (arch == "x86_64") {
+			arch = "x64"
+		}
 		const debugbackend = path.join(extensionDirectory, "bin", arch, "luadebug.exe")
 		return new vscode.DebugAdapterExecutable(debugbackend)
 	}

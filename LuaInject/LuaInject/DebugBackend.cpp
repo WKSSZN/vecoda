@@ -251,6 +251,7 @@ bool DebugBackend::Initialize(HINSTANCE hInstance)
     // Give the front end the address of our Initialize function so that
     // it can call it once we're done loading.
     m_eventChannel.WriteUInt32(EventId_Initialize);
+    m_eventChannel.WriteUInt32(static_cast<unsigned int>(sizeof(void*)));
     m_eventChannel.WriteUInt(reinterpret_cast<size_t>(FinishInitialize));
     m_eventChannel.Flush();
 
@@ -1105,6 +1106,8 @@ void DebugBackend::CommandThreadProc()
                 break;
             case CommandId_Evaluate:
                 {
+                    unsigned int reqId;
+                    m_commandChannel.ReadUInt32(reqId);
 
                     std::string expression;
                     m_commandChannel.ReadString(expression);
@@ -1122,14 +1125,21 @@ void DebugBackend::CommandThreadProc()
                         success = Evaluate(api, L, expression, stackLevel, result);
                     }
                     
-                    m_commandChannel.WriteUInt32(success);
-                    m_commandChannel.WriteString(result);
-                    m_commandChannel.Flush();
+                    m_eventChannel.WriteUInt32(EventID_EvaluateRet);
+                    m_eventChannel.WriteUInt(lstate);
+                    m_eventChannel.WriteUInt32(reqId);
+                    m_eventChannel.WriteUInt32(stackLevel);
+                    m_eventChannel.WriteUInt32(success);
+                    m_eventChannel.WriteString(result);
+                    m_eventChannel.Flush();
 
                 }
                 break;
 			case CommandId_ExpandTable:
 				{
+                    unsigned int reqId;
+                    m_commandChannel.ReadUInt32(reqId);
+
 					unsigned int scope;
 					m_commandChannel.ReadUInt32(scope);
 
@@ -1148,9 +1158,14 @@ void DebugBackend::CommandThreadProc()
                         success = ExpandTable(api, L, stackLevel, static_cast<Scope>(scope), reference, result);
 					}
 
-					m_commandChannel.WriteUInt32(success);
-					m_commandChannel.WriteString(result);
-					m_commandChannel.Flush();
+                    m_eventChannel.WriteUInt32(EventID_ExpandTableRet);
+                    m_eventChannel.WriteUInt(lstate);
+                    m_eventChannel.WriteUInt32(reqId);
+                    m_eventChannel.WriteUInt32(stackLevel);
+					m_eventChannel.WriteUInt32(success);
+					m_eventChannel.WriteString(result);
+                    m_eventChannel.WriteUInt32(reference);
+					m_eventChannel.Flush();
 				}
 				break;
             case CommandId_LoadDone:
@@ -3477,6 +3492,7 @@ void DebugBackend::WaitForAttach()
     // Start a new thread to handle the incoming event channel.
     DWORD threadId;
     m_commandThread = CreateThread(NULL, 0, StaticCommandThreadProc, this, 0, &threadId);
+    retachChannel.WriteUInt32(static_cast<unsigned int>(sizeof(void*)));
     // send all info
     retachChannel.WriteUInt32(m_vms.size());
     for (auto it = m_vms.begin(); it != m_vms.end(); ++it)

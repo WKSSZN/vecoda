@@ -35,25 +35,21 @@ local function parseEvaluateResult(success, strret)
     return true, root
 end
 
-event.on('evaluate', function(expression, nvm, stackLevel)
+event.on('evaluate', function(seq, expression, nvm, stackLevel)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Evaluate)
     debugdata.CommandChannel:WriteUInt(nvm)
+    debugdata.CommandChannel:WriteUInt32(seq)
     debugdata.CommandChannel:WriteString(expression or '')
     debugdata.CommandChannel:WriteUInt32(stackLevel)
-    local success = debugdata.CommandChannel:ReadBool()
-    local result = debugdata.CommandChannel:ReadString()
-    return parseEvaluateResult(success, result)
 end)
 
-event.on('expand', function(scope, nvm, stackLevel, reference)
+event.on('expand', function(seq, scope, nvm, stackLevel, reference)
     debugdata.CommandChannel:WriteUInt32(launcher.CommandId_ExpandTable)
     debugdata.CommandChannel:WriteUInt(nvm)
+    debugdata.CommandChannel:WriteUInt32(seq)
     debugdata.CommandChannel:WriteUInt32(scope)
     debugdata.CommandChannel:WriteUInt32(stackLevel)
     debugdata.CommandChannel:WriteUInt32(reference)
-    local success = debugdata.CommandChannel:ReadBool()
-    local result = debugdata.CommandChannel:ReadString()
-    return parseEvaluateResult(success, result)
 end)
 
 function m.init(data)
@@ -172,6 +168,21 @@ function m.update(msg)
         debugdata.EventChannel:ReadUInt32()
         debugdata.EventChannel:ReadUInt32()
         handleBreak(nvm, bp, bp ~= nil)
+    elseif eventId == launcher.EventID_EvaluateRet or eventId == launcher.EventID_ExpandTableRet then
+        local seq = debugdata.EventChannel:ReadUInt32()
+        local stackLevel = debugdata.EventChannel:ReadUInt32()
+        local success = debugdata.EventChannel:ReadBool()
+        local result = debugdata.EventChannel:ReadString()
+
+        local suc, root = parseEvaluateResult(success, result)
+        if eventId == launcher.EventID_EvaluateRet then
+            event.emit("evaluateRet", seq, nvm, stackLevel, suc, root)
+        else
+            local reference = debugdata.EventChannel:ReadUInt32()
+            event.emit("expandRet", seq, reference, nvm, stackLevel, suc, root)
+        end
+        local e = eventId == launcher.EventID_EvaluateRet and "evaluateRet" or "expandTableRet"
+        event.emit(e, seq, nvm, stackLevel, suc, root)
     end
 end
 

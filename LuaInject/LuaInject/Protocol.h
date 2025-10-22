@@ -50,6 +50,8 @@ enum EventId
     EventId_Message             = 9,    // Event containing a string message from the debugger.
     EventId_SessionEnd          = 8,    // This is used internally and shouldn't be sent.
     EventId_NameVM              = 10,   // Sent when the name of a VM is set.
+    EventID_EvaluateRet         = 11,
+    EventID_ExpandTableRet      = 12,
 };
 
 enum CommandId

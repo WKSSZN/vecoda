@@ -81,33 +81,94 @@ local function parseVariable(root, vm, stackLevel)
     return values
 end
 
-function m.variables(reference)
-    local variable = getVariable(reference)
-    local scopedVariables = {}
-    if not variable then return end
-    if not variable.value then
-        local success, root
-        success, root = event.emit("expand", variable.scope or 0, variable.vm, variable.stackLevel, variable.reference or 0)
-        if not success then
-            return {
-                error = {
-                    id = 0,
-                    format = root
-                }
+event.on("evaluateRet", function (seq, vm, stackLevel, success, root)
+    local req = {
+        seq = seq,
+        command = "evaluate"
+    }
+    if not success then
+        message.error(req, {error = {format = root, id = 2}})
+        return
+    end
+    if root:numChildren() == 0 then
+        message.error(req, {error = { format = "no result", id = 2 }})
+        return
+    end
+    if root.___children[1]:name() == 'values' then -- 只取第一个显示
+        root = root.___children[1].___children[1]
+    end
+    if root.___children[1]:name() == 'table' then
+        local tableEl = root.___children[1]
+        if tableEl["@empty"] then
+            message.success(req, {result = "{}", type = "table"})
+            return
+        else
+            message.success(req, {result = "table", type = "table",
+                variablesReference = m.createVariable {
+                    reference = tonumber(tableEl["@reference"]),
+                    stackLevel = stackLevel,
+                    vm = vm
+                }})
+            return
+        end
+    elseif root.___children[1]:name() == 'value' then
+        root = root.___children[1]
+        local v = root.___children[1]:value()
+        local ntype = root.___children[2]:value()
+        -- if ntype == 'number' then
+        --     v = tonumber(v)
+        -- end
+        message.success(req, {result = encoding.toUtf8(v), type = ntype, variablesReference = 0})
+        return
+    elseif root.___children[1]:name() == 'function' then
+        root = root.___children[1]
+        local fileid = tonumber(root.___children[1]:value())
+        local line = tonumber(root.___children[2]:value()) + 1
+        local ret = {
+            result = 'function',
+            type = 'function',
+        }
+        if fileid > 0 then
+            local objFile = files.getFile(fileid)
+            ret.result = 'function ' .. (objFile.path or "<Unknow>") .. ":" .. line
+            ret.presentationHint = {
+                kind = 'method'
             }
         end
-        local values = parseVariable(root.___children[1], variable.vm, variable.stackLevel)
-        if not variable.scope then
-            table.sort(values, function(a, b)
-                return a.name < b.name
-            end)
-        end
-        variable.value = values
-        scopedVariables = values
-    else
-        scopedVariables = variable.value
+        message.success(req, ret)
+        return
     end
-    return scopedVariables
+    message.error(req, {format = "no result", id = 2})
+end)
+
+event.on("expandRet", function (seq, reference, vm, stackLevel, success, root)
+    local variable = getVariable(reference)
+    if not variable then return end
+    local req = {seq = seq, command = "variables"}
+    if not success then
+        message.error(req, {error = {id = 0, format = root}})
+        return
+    end
+    local values = parseVariable(root.___children[1], vm, stackLevel)
+    if not variable.scope then
+        table.sort(values, function(a, b)
+            return a.name < b.name
+        end)
+    end
+    variable.value = values
+
+    message.success(req, {variables = values})
+end)
+
+function m.variables(req)
+    local reference = req.arguments.variablesReference
+    local variable = getVariable(reference)
+    if not variable then return end
+    if not variable.value then
+        event.emit("expand", req.seq, variable.scope or 0, variable.vm, variable.stackLevel, variable.reference or 0)
+    else
+        message.success(req, {variables = variable.value})
+    end
 end
 
 function m.scopes(frameId)
@@ -127,72 +188,10 @@ function m.scopes(frameId)
     return result
 end
 
-function m.evaluate(expression, frameId)
+function m.evaluate(req)
+    local expression, frameId = req.arguments.expression, req.arguments.frameId or 0
     local vm, stackLevel = frameId >> 5, frameId & 0x1f
-    local success, root = event.emit('evaluate', expression, vm, stackLevel)
-    if not success then
-        return {
-            error = { format = root, id = 2 },
-        }
-    end
-    if root:numChildren() == 0 then
-        return {
-            error = { format = "no result", id = 2 }
-        }
-    end
-    if root.___children[1]:name() == 'values' then -- 只取第一个显示
-        root = root.___children[1].___children[1]
-    end
-    if root.___children[1]:name() == 'table' then
-        local tableEl = root.___children[1]
-        if tableEl["@empty"] then
-            return {
-                result = "{}",
-                type = "table"
-            }
-        else
-            return {
-                result = "table",
-                type = "table",
-                variablesReference = m.createVariable {
-                    reference = tonumber(tableEl["@reference"]),
-                    stackLevel = stackLevel,
-                    vm = vm
-                }
-            }
-        end
-    elseif root.___children[1]:name() == 'value' then
-        root = root.___children[1]
-        local v = root.___children[1]:value()
-        local ntype = root.___children[2]:value()
-        -- if ntype == 'number' then
-        --     v = tonumber(v)
-        -- end
-        return {
-            result = encoding.toUtf8(v),
-            type = ntype,
-            variablesReference = 0
-        }
-    elseif root.___children[1]:name() == 'function' then
-        root = root.___children[1]
-        local fileid = tonumber(root.___children[1]:value())
-        local line = tonumber(root.___children[2]:value()) + 1
-        local ret = {
-            result = 'function',
-            type = 'function',
-        }
-        if fileid > 0 then
-            local objFile = files.getFile(fileid)
-            ret.result = 'function ' .. (objFile.path or "<Unknow>") .. ":" .. line
-            ret.presentationHint = {
-                kind = 'method'
-            }
-        end
-        return ret
-    end
-    return {
-        error = { format = "no result", id = 2 }
-    }
+    event.emit('evaluate', req.seq, expression, vm, stackLevel)
 end
 
 function m.createVariable(var)

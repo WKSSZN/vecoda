@@ -20,10 +20,23 @@ function m.init(msg, cwd)
     end
 end
 
+local function normalize(path)
+    local stash = {}
+    for p in string.gmatch(path, "[^\\]+") do
+        if p == "." then
+        elseif p == ".." then
+            stash[#stash] = nil
+        else
+            stash[#stash+1] = p
+        end
+    end
+    return table.concat(stash, "\\")
+end
+
 function m.addFile(name, content)
     name = name:gsub("^%.\\", ""):gsub('/', '\\')
     if not fs.path(name):is_absolute() then
-        name = baseDir .. name
+        name = baseDir .. normalize(name)
     end
     if fs.exists(name) then
         files[fileId] = {

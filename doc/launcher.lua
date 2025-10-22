@@ -11,10 +11,11 @@ function launcher.Launch(exeFilePath, commandArgs, workingDirectory)end
 
 ---@alias T number
 ---附加到指定进程
----@param processId number 进程id
+---@param processId number|string 进程id或者远程ip地址
+---@param port number? 远程端口
 ---@return {vms:number[],scripts:[{name:string,source:string,state:number}]}|nil 上一次Inject时的数据
 ---@return LuaDebugData
-function launcher.Attach(processId)end
+function launcher.Attach(processId, port)end
 
 --[[
 enum EventId
@@ -61,6 +62,8 @@ launcher.EventId_LoadError = 7
 launcher.EventId_Message = 9
 launcher.EventId_SessionEnd = 8
 launcher.EventId_NameVM = 10
+launcher.EventID_EvaluateRet = 11
+launcher.EventID_ExpandTableRet = 12
 launcher.CommandId_Continue = 1
 launcher.CommandId_StepOver = 2
 launcher.CommandId_StepInto = 3
@@ -78,8 +81,8 @@ launcher.CommandId_DeleteAllBreakpoints = 14
 launcher.CommandId_StepOut = 15
 
 ---@class LuaDebugData
----@field EventChannel Channel
----@field CommandChannel Channel
+---@field EventChannel ReadChannel
+---@field CommandChannel WriteChannel
 local debugdata = {}
 
 ---结束调试会话
@@ -88,37 +91,40 @@ function debugdata:Stop(kill)end
 ---启动调试会话 只能调用一次
 function debugdata:Resume()end
 
----@class Channel
-local channel = {}
+---@class ReadChannel
+local read_channel = {}
+
+---@class WriteChannel
+local write_channel = {}
 
 ---写入一个32位无符号整数到通道
 ---@param value integer
 ---@return boolean 是否写入成功
-function channel:WriteUInt32(value)end
+function write_channel:WriteUInt32(value)end
 ---写入一个32/64位的无符号整数
 ---@param value integer
 ---@return boolean
-function channel:WriteUInt(value)end
+function write_channel:WriteUInt(value)end
 ---写入字符串
 ---@param value string
 ---@return boolean 是否写入成功
-function channel:WriteString(value)end
+function write_channel:WriteString(value)end
 ---写入布尔值
 ---@param value boolean
 ---@return boolean 是否写入成功
-function channel:WriteBool(value)end
+function write_channel:WriteBool(value)end
 ---读取一个32位无符号整数从通道
 ---@return integer|nil 读取的整数值，如果读取失败则返回nil
-function channel:ReadUInt32()end
+function read_channel:ReadUInt32()end
 ---@return string|nil 读取的字符串，如果读取失败则返回nil
-function channel:ReadString()end
+function read_channel:ReadString()end
 ---@return boolean|nil 读取的布尔值，如果读取失败则返回nil
-function channel:ReadBool()end
+function read_channel:ReadBool()end
 ---非阻塞模式
 ---@return integer|nil 如果有数据可读则返回读取的整数值，否则返回nil
 ---@return boolean 该管道是否关闭了
-function channel:NReadUInt32()end
+function read_channel:NReadUInt32()end
 ---读取一个32/64位的无符号整数
 ---@return integer|nil
-function channel:ReadUInt()end
+function read_channel:ReadUInt()end
 return launcher

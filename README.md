@@ -34,7 +34,8 @@ Needs `.vscode/launch.json` on workspace.
 "`rqeuest`"="attach"  
 `cwd`: working directory  
 `name`: debug instance name    
-`encoding`: optional,  encoding of variables
+`encoding`: optional,  encoding of variables    
+`address`: optional, fill it when using remote debug, or manual select process to attach
 
 It needs to pick a progress when starts `attach` debugging
 

@@ -1,4 +1,8 @@
 # Change Log
+## 3.1.0
+Adds remote debug ability to debug client(not providing method to start debug backend on remote).
+
+debug客户端支持远程调试(未提供debug后端的远程调试启动方式)。
 ## 3.0.4
 Supports configuration of encoding of variables
 

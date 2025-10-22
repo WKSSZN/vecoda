@@ -21,9 +21,27 @@
     <ClCompile Include="Channel.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="ReadWrite.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TcpChannel.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Channel.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ReadWrite.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="launcher.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TcpChannel.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TcpChannelDelegate.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

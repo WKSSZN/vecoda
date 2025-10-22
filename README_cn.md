@@ -13,7 +13,7 @@ stepout
 pause    
 异常捕捉/筛选  
 变量查看  
-watch    
+watch      
 
 ## Requirements
 
@@ -35,7 +35,8 @@ watch
 "`rqeuest`"="attach"  
 `cwd`: 工作目录，和decoda一个含义  
 `name`: 可选，显示在vscode的debug pannel上面，如果有多个要调试的    
-`encoding`：可选，字符串变量的编码格式
+`encoding`：可选，字符串变量的编码格式    
+`address`: 可选，使用远程调试时填写，不填写会要求手动选择进程调试
 
 attach模式启动后需要手动选择进程  
 不同进程的attach配置可能是一样的，建议取不同的`name`，这样同时attach的时候，就可以用名字区分开来了。

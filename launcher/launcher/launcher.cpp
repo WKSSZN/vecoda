@@ -1,59 +1,12 @@
-extern "C" {
-#include <lua.hpp>
-}
 
-#include <Windows.h>
+#include "TcpChannel.h"
+#include "Channel.h"
+#include "TcpChannelDelegate.h"
+#include "launcher.h"
 #include <ImageHlp.h>
 #include <Psapi.h>
 #include <string.h>
-#include "Channel.h"
 
-#if defined(__i386__) || defined(_M_IX86)
-using Address = unsigned long;
-#define PC(a) (a.Eip)
-#else
-using Address = DWORD64;
-#define PC(a) (a.Rip)
-#endif
-
-struct ExeInfo
-{
-	Address entryPoint;
-	bool managed;
-	WORD arch;
-};
-
-enum EventId
-{
-	EventId_Initialize = 11,   // Sent when the backend is ready to have its initialize function called
-	EventId_CreateVM = 1,    // Sent when a script VM is created.
-	EventId_DestroyVM = 2,    // Sent when a script VM is destroyed.
-	EventId_LoadScript = 3,    // Sent when script data is loaded into the VM.
-	EventId_Break = 4,    // Sent when the debugger breaks on a line.
-	EventId_SetBreakpoint = 5,    // Sent when a breakpoint has been added in the debugger.
-	EventId_Exception = 6,    // Sent when the script encounters an exception (e.g. crash).
-	EventId_LoadError = 7,    // Sent when there is an error loading a script (e.g. syntax error).
-	EventId_Message = 9,    // Event containing a string message from the debugger.
-	EventId_SessionEnd = 8,    // This is used internally and shouldn't be sent.
-	EventId_NameVM = 10,   // Sent when the name of a VM is set.
-};
-
-enum CommandId
-{
-	CommandId_Continue = 1,    // Continues execution until the next break point.
-	CommandId_StepOver = 2,    // Steps to the next line, not entering any functions.
-	CommandId_StepInto = 3,    // Steps to the next line, entering any functions.
-	CommandId_ToggleBreakpoint = 4,    // Toggles a breakpoint on a line on and off.
-	CommandId_Break = 5,    // Instructs the debugger to break on the next line of script code.
-	CommandId_Evaluate = 6,    // Evaluates the value of an expression in the current context.
-	CommandId_Detach = 8,    // Detaches the debugger from the process.
-	CommandId_PatchReplaceLine = 9,    // Replaces a line of code with a new line.
-	CommandId_PatchInsertLine = 10,   // Adds a new line of code.
-	CommandId_PatchDeleteLine = 11,   // Deletes a line of code.
-	CommandId_LoadDone = 12,   // Signals to the backend that the frontend has finished processing a load.
-	CommandId_IgnoreException = 13,   // Instructs the backend to ignore the specified exception message in the future.
-	CommandId_DeleteAllBreakpoints = 14,// Instructs the backend to clear all breakpoints set
-};
 
 bool getExeInfo(const char* fileName, ExeInfo& info)
 {
@@ -178,117 +131,217 @@ bool hasModule(const char* name, HANDLE hProcess)
 	return false;
 }
 
-extern "C" {
-	int launchProcess(lua_State* L) {
-		const char* exeFileName = luaL_checkstring(L, 1);
-		const char* commandArgs = luaL_checkstring(L, 2);
-		const char* currentDirectory = luaL_checkstring(L, 3);
-		char exeCommand[256];
-		_snprintf_s(exeCommand, 256, "\"%s\" %s", exeFileName, commandArgs);
-		STARTUPINFOA startUpInfo = { 0 };
-		startUpInfo.cb = sizeof(STARTUPINFOA);
-
-		PROCESS_INFORMATION processInfo;
-
-		ExeInfo exeInfo;
-		if (!getExeInfo(exeFileName, exeInfo) || exeInfo.entryPoint == 0) {
-			return luaL_error(L, "Error: The entry point for the application could not be located");
+AttachType parseAttachParam(lua_State* L, AttachParam *param)
+{
+	if (lua_isinteger(L, 1))
+	{
+		param->p.processId = static_cast<DWORD>(luaL_checkinteger(L, 1));
+		return AttachType::ProcessAttach;
+	}
+	else
+	{
+		if (!lua_isstring(L, 1))
+		{
+			luaL_error(L, "param error, need process id or remote ip");
+			return AttachType::None;
 		}
+		param->i.ip = luaL_checkstring(L, 1);
+		param->i.port = static_cast<int>(luaL_checkinteger(L, 2));
+		return AttachType::IPAttach;
+	}
+	return AttachType::None;
+}
+
+int launchProcess(lua_State* L) {
+	const char* exeFileName = luaL_checkstring(L, 1);
+	const char* commandArgs = luaL_checkstring(L, 2);
+	const char* currentDirectory = luaL_checkstring(L, 3);
+	char exeCommand[256];
+	_snprintf_s(exeCommand, 256, "\"%s\" %s", exeFileName, commandArgs);
+	STARTUPINFOA startUpInfo = { 0 };
+	startUpInfo.cb = sizeof(STARTUPINFOA);
+
+	PROCESS_INFORMATION processInfo;
+
+	ExeInfo exeInfo;
+	if (!getExeInfo(exeFileName, exeInfo) || exeInfo.entryPoint == 0) {
+		return luaL_error(L, "Error: The entry point for the application could not be located");
+	}
 #if defined(__i386__) || defined(_M_IX86)
-		if (exeInfo.arch != IMAGE_FILE_MACHINE_I386) {
-			return luaL_error(L, "Error: Debugging 64-bit applications is not supported");
-		}
+	if (exeInfo.arch != IMAGE_FILE_MACHINE_I386) {
+		return luaL_error(L, "Error: Debugging 64-bit applications is not supported");
+	}
 #else
-		if (exeInfo.arch != IMAGE_FILE_MACHINE_AMD64) {
-			return luaL_error(L, "Error: Debugging 32-bit applications is not supported");
-		}
+	if (exeInfo.arch != IMAGE_FILE_MACHINE_AMD64) {
+		return luaL_error(L, "Error: Debugging 32-bit applications is not supported");
+	}
 #endif
 
-		DWORD flags = DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS | CREATE_NEW_CONSOLE;
+	DWORD flags = DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS | CREATE_NEW_CONSOLE;
 
-		if (!CreateProcessA(NULL, const_cast<LPSTR>(exeCommand), NULL, NULL, TRUE, flags, NULL, currentDirectory, &startUpInfo, &processInfo)) {
-			luaL_error(L, "Error: Create Proccess Failed with app:%s, working directory:%s", exeCommand, currentDirectory);
-		}
+	if (!CreateProcessA(NULL, const_cast<LPSTR>(exeCommand), NULL, NULL, TRUE, flags, NULL, currentDirectory, &startUpInfo, &processInfo)) {
+		luaL_error(L, "Error: Create Proccess Failed with app:%s, working directory:%s", exeCommand, currentDirectory);
+	}
 
-		if (!exeInfo.managed) {
-			Address entryPoint = exeInfo.entryPoint;
+	if (!exeInfo.managed) {
+		Address entryPoint = exeInfo.entryPoint;
 
-			BYTE breakPointData;
-			bool done = false;
+		BYTE breakPointData;
+		bool done = false;
 
-			while (!done) {
-				DEBUG_EVENT debugEvent;
-				WaitForDebugEvent(&debugEvent, INFINITE);
+		while (!done) {
+			DEBUG_EVENT debugEvent;
+			WaitForDebugEvent(&debugEvent, INFINITE);
 				
-				DWORD continueStatus = DBG_EXCEPTION_NOT_HANDLED;
-				if (debugEvent.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
-					if (debugEvent.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP ||
-						debugEvent.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT) {
-						CONTEXT context;
-						context.ContextFlags = CONTEXT_FULL;
+			DWORD continueStatus = DBG_EXCEPTION_NOT_HANDLED;
+			if (debugEvent.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+				if (debugEvent.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP ||
+					debugEvent.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT) {
+					CONTEXT context;
+					context.ContextFlags = CONTEXT_FULL;
 
-						GetThreadContext(processInfo.hThread, &context);
+					GetThreadContext(processInfo.hThread, &context);
 
-						if (PC(context) == entryPoint + 1) {
-							setBreakPoint(processInfo.hProcess, (LPVOID)entryPoint, false, &breakPointData);
-							done = true;
+					if (PC(context) == entryPoint + 1) {
+						setBreakPoint(processInfo.hProcess, (LPVOID)entryPoint, false, &breakPointData);
+						done = true;
 
-							--PC(context);
-							SetThreadContext(processInfo.hThread, &context);
-							SuspendThread(processInfo.hThread);
-						}
-						continueStatus = DBG_CONTINUE;
+						--PC(context);
+						SetThreadContext(processInfo.hThread, &context);
+						SuspendThread(processInfo.hThread);
 					}
+					continueStatus = DBG_CONTINUE;
 				}
-				else if (debugEvent.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT) {
-					done = true;
-				}
-				else if (debugEvent.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT) {
-					entryPoint += reinterpret_cast<size_t>(debugEvent.u.CreateProcessInfo.lpBaseOfImage);
-					setBreakPoint(processInfo.hProcess, reinterpret_cast<void*>(entryPoint), true, &breakPointData);
-
-					CloseHandle(debugEvent.u.CreateProcessInfo.hFile);
-				}
-				else if (debugEvent.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT) {
-					CloseHandle(debugEvent.u.LoadDll.hFile);
-				}
-
-				ContinueDebugEvent(debugEvent.dwProcessId, debugEvent.dwThreadId, continueStatus);
 			}
+			else if (debugEvent.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT) {
+				done = true;
+			}
+			else if (debugEvent.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT) {
+				entryPoint += reinterpret_cast<size_t>(debugEvent.u.CreateProcessInfo.lpBaseOfImage);
+				setBreakPoint(processInfo.hProcess, reinterpret_cast<void*>(entryPoint), true, &breakPointData);
+
+				CloseHandle(debugEvent.u.CreateProcessInfo.hFile);
+			}
+			else if (debugEvent.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT) {
+				CloseHandle(debugEvent.u.LoadDll.hFile);
+			}
+
+			ContinueDebugEvent(debugEvent.dwProcessId, debugEvent.dwThreadId, continueStatus);
 		}
-		DebugActiveProcessStop(processInfo.dwProcessId);
+	}
+	DebugActiveProcessStop(processInfo.dwProcessId);
 
-		DWORD exitCode;
-		if (GetExitCodeProcess(processInfo.hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
-			return luaL_error(L, "The process has terminated unexpectedly");
+	DWORD exitCode;
+	if (GetExitCodeProcess(processInfo.hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+		return luaL_error(L, "The process has terminated unexpectedly");
+	}
+
+	char eventChannelName[256];
+	_snprintf(eventChannelName, 256, "Vecoda.Event.%x", processInfo.dwProcessId);
+	char commandChannelName[256];
+	_snprintf(commandChannelName, 256, "Vecoda.Command.%x", processInfo.dwProcessId);
+
+	Channel* eventChannel = new Channel();
+	if (!eventChannel->Create(eventChannelName)) {
+		delete eventChannel;
+		return luaL_error(L, "create event channel failed");
+	}
+	Channel* commandChannel = new Channel();
+	if (!commandChannel->Create(commandChannelName)) {
+		delete commandChannel;
+		return luaL_error(L, "create command channel failed");
+	}
+
+	// inject dll
+	std::string message;
+	if ((message = injectDll(processInfo.dwProcessId, "LuaInject.dll")).size() != 0) {
+		delete eventChannel;
+		delete commandChannel;
+		return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
+	}
+
+	eventChannel->WaitForConnection();
+		
+
+	unsigned int eventId;
+	eventChannel->ReadUInt32(eventId);
+	if (eventId != EventId_Initialize) {
+		return luaL_error(L, "Dll has not Inittialize Event");
+	}
+
+	uint64_t function;
+	unsigned int ptrSize;
+	eventChannel->ReadUInt32(ptrSize);
+	eventChannel->SetPointerSize(ptrSize);
+	commandChannel->SetPointerSize(ptrSize);
+	eventChannel->ReadUInt(function);
+
+	DWORD threadId;
+	HANDLE thread = CreateRemoteThread(processInfo.hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
+	if (thread == NULL) {
+		return luaL_error(L, "run dll thread failed");
+	}
+
+	WaitForSingleObject(thread, INFINITE);
+	GetExitCodeThread(thread, &exitCode);
+
+	CloseHandle(thread);
+	thread = NULL;
+	lua_newtable(L);
+	PushRead(L, eventChannel);
+	lua_setfield(L, -2, "EventChannel");
+	PushWrite(L, commandChannel);
+	lua_setfield(L, -2, "CommandChannel");
+	lua_pushlightuserdata(L, processInfo.hProcess);
+	lua_setfield(L, -2, "Process");
+	lua_pushlightuserdata(L, processInfo.hThread);
+	lua_setfield(L, -2, "Thread");
+	luaL_getmetatable(L, "FRONTENDMETA");
+	lua_setmetatable(L, -2);
+	return 1;
+}
+
+int attachProcess(lua_State* L)
+{
+	AttachParam p;
+	AttachType type = parseAttachParam(L, &p);
+	bool needInject = false;
+	HANDLE hProcess = NULL;
+	if (type == AttachType::ProcessAttach)
+	{
+		hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE | PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, p.p.processId);
+		if (hProcess == NULL)
+		{
+			return luaL_error(L, "open process[%x] failed", p.p.processId);
 		}
+		needInject = !hasModule("LuaInject.dll", hProcess);
+	}
 
-		char eventChannelName[256];
-		_snprintf(eventChannelName, 256, "Vecoda.Event.%x", processInfo.dwProcessId);
-		char commandChannelName[256];
-		_snprintf(commandChannelName, 256, "Vecoda.Command.%x", processInfo.dwProcessId);
-
+	if (needInject)
+	{
+		char pipeName[256];
+		_snprintf(pipeName, 256, "Vecoda.Event.%x", p.p.processId);
 		Channel* eventChannel = new Channel();
-		if (!eventChannel->Create(eventChannelName)) {
+		if (!eventChannel->Create(pipeName)) {
 			delete eventChannel;
 			return luaL_error(L, "create event channel failed");
 		}
+		_snprintf(pipeName, 256, "Vecoda.Command.%x", p.p.processId);
 		Channel* commandChannel = new Channel();
-		if (!commandChannel->Create(commandChannelName)) {
+		if (!commandChannel->Create(pipeName)) {
 			delete commandChannel;
 			return luaL_error(L, "create command channel failed");
 		}
-
-		// inject dll
-		std::string message;
-		if ((message = injectDll(processInfo.dwProcessId, "LuaInject.dll")).size() != 0) {
+		auto message = injectDll(p.p.processId, "LuaInject.dll");
+		if (message.size() != 0)
+		{
 			delete eventChannel;
 			delete commandChannel;
 			return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
 		}
 
 		eventChannel->WaitForConnection();
-		
+
 
 		unsigned int eventId;
 		eventChannel->ReadUInt32(eventId);
@@ -296,294 +349,188 @@ extern "C" {
 			return luaL_error(L, "Dll has not Inittialize Event");
 		}
 
-		size_t function;
+		uint64_t function;
 		eventChannel->ReadUInt(function);
 
 		DWORD threadId;
-		HANDLE thread = CreateRemoteThread(processInfo.hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
+		HANDLE thread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
 		if (thread == NULL) {
 			return luaL_error(L, "run dll thread failed");
 		}
 
+		DWORD exitCode;
 		WaitForSingleObject(thread, INFINITE);
 		GetExitCodeThread(thread, &exitCode);
 
 		CloseHandle(thread);
-		thread = NULL;
+		lua_pushnil(L);
 
-		lua_newtable(L);
-		lua_pushlightuserdata(L, eventChannel);
-		luaL_getmetatable(L, "CHANNELMETA");
-		lua_setmetatable(L, -2);
-		lua_setfield(L, -2, "EventChannel");
-		lua_pushlightuserdata(L, commandChannel);
-		luaL_getmetatable(L, "CHANNELMETA");
-		lua_setmetatable(L, -2);
-		lua_setfield(L, -2, "CommandChannel");
-		lua_pushlightuserdata(L, processInfo.hProcess);
-		lua_setfield(L, -2, "Process");
-		lua_pushlightuserdata(L, processInfo.hThread);
-		lua_setfield(L, -2, "Thread");
-		luaL_getmetatable(L, "FRONTENDMETA");
-		lua_setmetatable(L, -2);
-		return 1;
+		PushRead(L, eventChannel);
+		PushWrite(L, commandChannel);
 	}
-
-	int attachProcess(lua_State* L)
+	else
 	{
-		DWORD processId = luaL_checkinteger(L, 1);
-		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE | PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, processId);
-		if (hProcess == NULL)
-		{
-			return luaL_error(L, "open process[%x] failed", processId);
-		}
-		bool needInject = !hasModule("LuaInject.dll", hProcess);
-		Channel* eventChannel;
-		Channel* commandChannel;
-
-		if (needInject)
+		ReadWrite* retach;
+		ReadWrite* read;
+		ReadWrite* write;
+		if (type == AttachType::ProcessAttach)
 		{
 			char pipeName[256];
-			_snprintf(pipeName, 256, "Vecoda.Event.%x", processId);
-			eventChannel = new Channel();
+			_snprintf(pipeName, 256, "Vecoda.Attach.%x", p.p.processId);
+			Channel* retachChannel = new Channel();
+			if (!retachChannel->Connect(pipeName))
+			{
+				delete retachChannel;
+				return luaL_error(L, "failed to connect to process %x", p.p.processId);
+			}
+			_snprintf(pipeName, 256, "Vecoda.Event.%x", p.p.processId);
+			Channel* eventChannel = new Channel();
 			if (!eventChannel->Create(pipeName)) {
 				delete eventChannel;
 				return luaL_error(L, "create event channel failed");
 			}
-			_snprintf(pipeName, 256, "Vecoda.Command.%x", processId);
-			commandChannel = new Channel();
+			_snprintf(pipeName, 256, "Vecoda.Command.%x", p.p.processId);
+			Channel* commandChannel = new Channel();
 			if (!commandChannel->Create(pipeName)) {
 				delete commandChannel;
 				return luaL_error(L, "create command channel failed");
 			}
-			auto message = injectDll(processId, "LuaInject.dll");
-			if (message.size() != 0)
-			{
-				delete eventChannel;
-				delete commandChannel;
-				return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
-			}
-			
-			eventChannel->WaitForConnection();
 
-
-			unsigned int eventId;
-			eventChannel->ReadUInt32(eventId);
-			if (eventId != EventId_Initialize) {
-				return luaL_error(L, "Dll has not Inittialize Event");
-			}
-
-			size_t function;
-			eventChannel->ReadUInt(function);
-
-			DWORD threadId;
-			HANDLE thread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, NULL, 0, &threadId);
-			if (thread == NULL) {
-				return luaL_error(L, "run dll thread failed");
-			}
-
-			DWORD exitCode;
-			WaitForSingleObject(thread, INFINITE);
-			GetExitCodeThread(thread, &exitCode);
-
-			CloseHandle(thread);
-			lua_pushnil(L);
+			retach = retachChannel;
+			read = eventChannel;
+			write = commandChannel;
 		}
 		else
 		{
-			char pipeName[256];
-			_snprintf(pipeName, 256, "Vecoda.Attach.%x", processId);
-			Channel retachChannel;
-			if (!retachChannel.Connect(pipeName))
+			TcpChannel* channel = new TcpChannel();
+			if (!channel->Connect(p.i.ip, p.i.port))
 			{
-				return luaL_error(L, "failed to connect to process %x", processId);
+				delete channel;
+				return luaL_error(L, "connect to %s:%d failed", p.i.ip, p.i.port);
 			}
-			_snprintf(pipeName, 256, "Vecoda.Event.%x", processId);
-			eventChannel = new Channel();
-			if (!eventChannel->Create(pipeName)) {
-				delete eventChannel;
-				return luaL_error(L, "create event channel failed");
-			}
-			_snprintf(pipeName, 256, "Vecoda.Command.%x", processId);
-			commandChannel = new Channel();
-			if (!commandChannel->Create(pipeName)) {
-				delete commandChannel;
-				return luaL_error(L, "create command channel failed");
-			}
-			lua_newtable(L);
-			lua_newtable(L);
-			int vms = lua_gettop(L);
-			retachChannel.WriteUInt32(0);
-			unsigned int num;
-			retachChannel.ReadUInt32(num);
-			for (size_t i = 0; i < num; i++)
+			bool canDebug = false;
+			channel->ReadBool(canDebug);
+			if (!canDebug)
 			{
-				size_t vm;
-				retachChannel.ReadUInt(vm);
-				lua_pushnumber(L, vm);
-				lua_rawseti(L, vms, i + 1);
+				delete channel;
+				return luaL_error(L, "there is already a debug client connected");
 			}
-			lua_setfield(L, -2, "vms");
-			lua_newtable(L);
-			int scripts = lua_gettop(L);
-			retachChannel.ReadUInt32(num);
-			for (size_t i = 0; i < num; i++)
-			{
-				std::string str;
-				lua_newtable(L);
-				retachChannel.ReadString(str);
-				lua_pushstring(L, str.c_str());
-				lua_setfield(L, -2, "name");
-				retachChannel.ReadString(str);
-				lua_pushstring(L, str.c_str());
-				lua_setfield(L, -2, "source");
-				unsigned int state;
-				retachChannel.ReadUInt32(state);
-				lua_pushnumber(L, static_cast<lua_Number>(state));
-				lua_setfield(L, -2, "state");
-				lua_rawseti(L, scripts, i + 1);
-			}
-			lua_setfield(L, -2, "scripts");
+			retach = channel;
+			read = channel;
+			write = channel;
 		}
-
-		lua_newtable(L);
-		lua_pushlightuserdata(L, eventChannel);
-		luaL_getmetatable(L, "CHANNELMETA");
-		lua_setmetatable(L, -2);
-		lua_setfield(L, -2, "EventChannel");
-		lua_pushlightuserdata(L, commandChannel);
-		luaL_getmetatable(L, "CHANNELMETA");
-		lua_setmetatable(L, -2);
-		lua_setfield(L, -2, "CommandChannel");
-		lua_pushlightuserdata(L, hProcess);
-		lua_setfield(L, -2, "Process");
-		luaL_getmetatable(L, "FRONTENDMETA");
-		lua_setmetatable(L, -2);
-		return 2;
-	}
-
-	int channel_readUInt32(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		unsigned int value;
-		if (channel->ReadUInt32(value)) {
-			lua_pushinteger(L, value);
-			return 1;
-		}
-		return 0;
-	}
-
-	int channel_readUInt(lua_State* L) {
-		Channel* channel = reinterpret_cast<Channel*>(lua_touserdata(L, 1));
-		size_t value;
-		if (channel->ReadUInt(value)) {
-			lua_pushinteger(L, value);
-			return 1;
-		}
-		return 0;
-	}
-
-	int channel_nReadUInt32(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		unsigned int value;
-		if (channel->NReadUInt32(value)) {
-			lua_pushinteger(L, value);
-			return 1;
-		}
-		else {
-			lua_pushnil(L);
-			if (value == 0xffffffff) { // 断开连接了
-				lua_pushboolean(L, 1);
-				return 2;
-			}
-			return 1;
-		}
-	}
-	int channel_readString(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		std::string value;
-		if (channel->ReadString(value)) {
-			lua_pushstring(L, value.c_str());
-			return 1;
-		}
-		return 0;
-
-	}
-	int channel_readBool(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		bool value;
-		if (channel->ReadBool(value)) {
-			lua_pushboolean(L, value);
-			return 1;
-		}
-		return 0;
-	}
-	int channel_writeUInt32(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		unsigned int value = luaL_checkinteger(L, 2);
-		lua_pushboolean(L, channel->WriteUInt32(value));
-		return 1;
-	}
-	int channel_writeUInt(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		size_t value = luaL_checkinteger(L, 2);
-		lua_pushboolean(L, channel->WriteUInt(value));
-		return 1;
-	}
-	int channel_writeString(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		const char* str = luaL_checkstring(L, 2);
-		lua_pushboolean(L, channel->WriteString(str));
-		return 1;
-	}
-	int channel_writeBool(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		int value = lua_toboolean(L, 2);
-		lua_pushboolean(L, channel->WriteBool(value != 0));
-		return 1;
-	}
-	int channel_gc(lua_State* L) {
-		Channel* channel = (Channel*)lua_touserdata(L, 1);
-		delete channel;
-		return 0;
-	}
-	int frontentd_stop(lua_State* L) {
-		luaL_checktype(L, 1, LUA_TTABLE);
-		bool kill = lua_toboolean(L, 2);
-		lua_getfield(L, 1, "Process");
-		luaL_checktype(L, -1, LUA_TLIGHTUSERDATA);
-		HANDLE process = (HANDLE)lua_touserdata(L, -1);
-		lua_getfield(L, 1, "CommandChannel");
-		Channel* commandChannel = static_cast<Channel*>(lua_touserdata(L, -1));
-		if (commandChannel != nullptr) {
-			commandChannel->WriteUInt32(CommandId::CommandId_Detach);
-			commandChannel->WriteBool(!kill);
-		}
-		lua_pushnil(L);
-		lua_setfield(L, 1, "EventChannel");
-		lua_pushnil(L);
-		lua_setfield(L, 1, "CommandChannel");
 		
-		if (kill) {
-			TerminateProcess(process, 0);
-		}
-		CloseHandle(process);
-		lua_pushnil(L);
-		lua_setfield(L, 1, "Process");
-		return 0;
-	}
+		lua_newtable(L);
+		lua_newtable(L);
+		int vms = lua_gettop(L);
+		retach->WriteUInt32(0);
+		unsigned int ptrSize;
+		retach->ReadUInt32(ptrSize);
+		retach->SetPointerSize(ptrSize);
+		read->SetPointerSize(ptrSize);
+		write->SetPointerSize(ptrSize);
+		unsigned int num;
+		retach->ReadUInt32(num);
 
-	int frontentd_resume(lua_State* L) {
-		luaL_checktype(L, 1, LUA_TTABLE);
-		lua_getfield(L, 1, "Thread");
-		HANDLE hThread = (HANDLE)lua_touserdata(L, -1);
-		if (hThread) {
-			ResumeThread(hThread);
-			CloseHandle(hThread);
-			lua_pushnil(L);
-			lua_setfield(L, 1, "Thread");
+		for (size_t i = 0; i < num; i++)
+		{
+			uint64_t vm;
+			retach->ReadUInt(vm);
+			lua_pushnumber(L, static_cast<lua_Number>(vm));
+			lua_rawseti(L, vms, i + 1);
 		}
-		return 0;
+		lua_setfield(L, -2, "vms");
+		lua_newtable(L);
+		int scripts = lua_gettop(L);
+		retach->ReadUInt32(num);
+		for (size_t i = 0; i < num; i++)
+		{
+			std::string str;
+			lua_newtable(L);
+			retach->ReadString(str);
+			lua_pushstring(L, str.c_str());
+			lua_setfield(L, -2, "name");
+			retach->ReadString(str);
+			lua_pushstring(L, str.c_str());
+			lua_setfield(L, -2, "source");
+			unsigned int state;
+			retach->ReadUInt32(state);
+			lua_pushnumber(L, static_cast<lua_Number>(state));
+			lua_setfield(L, -2, "state");
+			lua_rawseti(L, scripts, i + 1);
+		}
+		lua_setfield(L, -2, "scripts");
+
+		if (type == AttachType::ProcessAttach)
+		{
+			delete retach;
+			PushRead(L, dynamic_cast<Channel*>(read));
+			PushWrite(L, dynamic_cast<Channel*>(write));
+		}
+		else
+		{
+			std::shared_ptr<TcpChannel> ptr(dynamic_cast<TcpChannel*>(retach));
+			PushRead(L, new TcpChannelDelegate(ptr));
+			PushWrite(L, new TcpChannelDelegate(ptr));
+		}
 	}
+	lua_newtable(L);
+	lua_rotate(L, lua_absindex(L, -3), 1);
+	lua_setfield(L, -3, "CommandChannel");
+	lua_setfield(L, -2, "EventChannel");
+	lua_pushlightuserdata(L, hProcess);
+	lua_setfield(L, -2, "Process");
+	luaL_getmetatable(L, "FRONTENDMETA");
+	lua_setmetatable(L, -2);
+	return 2;
+}
+
+int frontentd_stop(lua_State* L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
+	bool kill = lua_toboolean(L, 2);
+	lua_getfield(L, 1, "Process");
+	luaL_checktype(L, -1, LUA_TLIGHTUSERDATA);
+	HANDLE process = (HANDLE)lua_touserdata(L, -1);
+	int t = lua_getfield(L, 1, "CommandChannel");
+	if (t != LUA_TNIL)
+	{
+		lua_getfield(L, -1, "WriteUInt32");
+		lua_pushvalue(L, -2);
+		lua_pushinteger(L, CommandId::CommandId_Detach);
+		lua_call(L, 2, 0);
+
+		lua_getfield(L, -1, "WriteBool");
+		lua_pushvalue(L, -2);
+		lua_pushboolean(L, !kill);
+		lua_call(L, 2, 0);
+	}
+	lua_pushnil(L);
+	lua_setfield(L, 1, "EventChannel");
+	lua_pushnil(L);
+	lua_setfield(L, 1, "CommandChannel");
+		
+	if (kill && process != NULL) {
+		TerminateProcess(process, 0);
+	}
+	if (process != NULL) {
+		CloseHandle(process);
+	}
+	lua_pushnil(L);
+	lua_setfield(L, 1, "Process");
+	return 0;
+}
+
+int frontentd_resume(lua_State* L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
+	lua_getfield(L, 1, "Thread");
+	HANDLE hThread = (HANDLE)lua_touserdata(L, -1);
+	if (hThread) {
+		ResumeThread(hThread);
+		CloseHandle(hThread);
+		lua_pushnil(L);
+		lua_setfield(L, 1, "Thread");
+	}
+	return 0;
 }
 
 static luaL_Reg luaLibs[] =
@@ -591,21 +538,6 @@ static luaL_Reg luaLibs[] =
 	{"Launch", launchProcess},
 	{"Attach", attachProcess},
 	{NULL, NULL}
-};
-
-static luaL_Reg channelLibs[] =
-{
-	{"ReadUInt32", channel_readUInt32},
-	{"NReadUInt32", channel_nReadUInt32},
-	{"ReadUInt", channel_readUInt},
-	{"ReadString", channel_readString},
-	{"ReadBool", channel_readBool},
-	{"WriteUInt32", channel_writeUInt32},
-	{"WriteUInt", channel_writeUInt},
-	{"WriteString", channel_writeString},
-	{"WriteBool", channel_writeBool},
-	{"__gc", channel_gc},
-	{NULL, NULL},
 };
 
 static luaL_Reg frontentdLibs[] =
@@ -632,6 +564,8 @@ void setEnums(lua_State* L) {
 		{"EventId_Message", 9},    // Event containing a string message from the debugger.
 		{"EventId_SessionEnd", 8},    // This is used internally and shouldn't be sent.
 		{"EventId_NameVM", 10},   // Sent when the name of a VM is set.
+		{"EventID_EvaluateRet", 11},
+		{"EventID_ExpandTableRet", 12},
 		{"CommandId_Continue", 1},    // Continues execution until the next break point.
 		{"CommandId_StepOver", 2},    // Steps to the next line, not entering any functions.
 		{"CommandId_StepInto", 3},    // Steps to the next line, entering any functions.
@@ -657,11 +591,6 @@ void setEnums(lua_State* L) {
 
 extern "C" __declspec(dllexport)
 int luaopen_launcher(lua_State * L) {
-	luaL_newmetatable(L, "CHANNELMETA");
-	lua_pushvalue(L, -1);
-	lua_setfield(L, -2, "__index");
-	luaL_setfuncs(L, channelLibs, 0);
-
 	luaL_newmetatable(L, "FRONTENDMETA");
 	lua_pushvalue(L, -1);
 	lua_setfield(L, -2, "__index");

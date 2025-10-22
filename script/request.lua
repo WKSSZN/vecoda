@@ -63,13 +63,23 @@ end
 function handlers.attach(req)
     local cwd = req.arguments.cwd
     local processId = tonumber(req.arguments.processId)
-    if processId == nil then
-        message.error(req, {error = "error process:" .. req.arguments.processId})
+    local address = req.arguments.address
+    if processId == nil and address == nil then
+        message.error(req, {error = {format="need process or address",id=5}})
         return
     end
-    local ok, predata, debugData = pcall(launcher.Attach, processId)
+    local ip, port
+    if address ~= nil then
+        ip, port = string.match(address, "([^:]+):(%d+)")
+        if not ip or not port then
+            message.error(req, {error = {format="error address format:" .. address,id=3}})
+            return
+        end
+        port = tonumber(port)
+    end
+    local ok, predata, debugData = pcall(launcher.Attach, processId or ip, port)
     if not ok then
-        message.error(req, {error = "Attach failed:" .. predata})
+        message.error(req, {error = {format="Attach failed:" .. predata,id=4}})
         return
     end
     files.init(message, cwd)
@@ -105,23 +115,11 @@ function handlers.scopes(req)
 end
 
 function handlers.variables(req)
-    local ret = variables.variables(req.arguments.variablesReference)
-    if ret.error then
-        message.error(req, ret)
-    else
-        message.success(req, {
-            variables = ret
-        })
-    end
+    variables.variables(req)
 end
 
 function handlers.evaluate(req)
-    local ret = variables.evaluate(req.arguments.expression, req.arguments.frameId or 0)
-    if ret.error then
-        message.error(req, ret)
-    else
-        message.success(req, ret)
-    end
+    variables.evaluate(req)
 end
 
 function handlers.threads(req)
