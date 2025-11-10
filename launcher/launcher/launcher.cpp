@@ -349,6 +349,10 @@ int attachProcess(lua_State* L)
 			return luaL_error(L, "Dll has not Inittialize Event");
 		}
 
+		unsigned int ptrSize;
+		eventChannel->ReadUInt32(ptrSize);
+		eventChannel->SetPointerSize(ptrSize);
+		commandChannel->SetPointerSize(ptrSize);
 		uint64_t function;
 		eventChannel->ReadUInt(function);
 

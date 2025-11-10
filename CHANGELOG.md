@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.1
+fix local attach always failed.     
+修复本地attach总是崩溃的问题
 ## 3.1.0
 Adds remote debug ability to debug client(not providing method to start debug backend on remote).
 
