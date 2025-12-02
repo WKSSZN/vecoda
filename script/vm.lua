@@ -64,4 +64,8 @@ function m.setCurThread(threadId)
     curThread = threadId
 end
 
+function m.stopped(threadId)
+    return stackTrace[threadId] == nil
+end
+
 return m

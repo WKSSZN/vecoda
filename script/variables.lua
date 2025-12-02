@@ -1,6 +1,7 @@
 local event = require 'event'
 local files = require 'files'
 local encoding = require 'encoding'
+local vm = require 'vm'
 ---@type LuaDebugMessage
 local message
 local variables = {}
@@ -165,7 +166,9 @@ function m.variables(req)
     local variable = getVariable(reference)
     if not variable then return end
     if not variable.value then
+        if not vm.stopped(variable.vm) then return end
         event.emit("expand", req.seq, variable.scope or 0, variable.vm, variable.stackLevel, variable.reference or 0)
+        message.output("stdout", "expand table")
     else
         message.success(req, {variables = variable.value})
     end
@@ -173,25 +176,28 @@ end
 
 function m.scopes(frameId)
     local result = {}
-    local vm, stackLevel = frameId >> 5, frameId & 0x1f
+    local threadId, stackLevel = frameId >> 5, frameId & 0x1f
+    if not vm.stopped(threadId) then return end
     for i, scope in ipairs(scopes) do
         result[i] = {
             name = scope,
             variablesReference = m.createVariable {
                 scope = i,
                 stackLevel = stackLevel,
-                vm = vm
+                vm = threadId
             },
             expensive = false,
         }
     end
+    message.output("stdout", "scopes")
     return result
 end
 
 function m.evaluate(req)
     local expression, frameId = req.arguments.expression, req.arguments.frameId or 0
-    local vm, stackLevel = frameId >> 5, frameId & 0x1f
-    event.emit('evaluate', req.seq, expression, vm, stackLevel)
+    local threadId, stackLevel = frameId >> 5, frameId & 0x1f
+    if not vm.stopped(threadId) then return end
+    event.emit('evaluate', req.seq, expression, threadId, stackLevel)
 end
 
 function m.createVariable(var)
