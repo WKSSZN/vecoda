@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.3
+delete debug log    
+去掉调试日志
 ## 3.1.2
 fix crashed when continue too fast    
 修复continue太快宿主进程会崩溃的bug
