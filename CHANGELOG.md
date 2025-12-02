@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.2
+fix crashed when continue too fast    
+修复continue太快宿主进程会崩溃的bug
 ## 3.1.1
 fix local attach always failed.     
 修复本地attach总是崩溃的问题
