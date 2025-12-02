@@ -156,7 +156,6 @@ function m.update(msg)
         local set = debugdata.EventChannel:ReadUInt32()
         event.emit('setBreakpoints', fileId, line, set == 1)
     elseif eventId == launcher.EventId_Break then
-        message.output("stdout", "break")
         handleBreak(nvm, nil, true)
     elseif eventId == launcher.EventId_NameVM then
         debugdata.EventChannel:ReadString()
@@ -196,7 +195,6 @@ function m.stop(queit)
             message.event('terminated')
         end
     end
-    curVm = 0
     message.output('stdout', 'Debug session stopped')
 end
 
@@ -217,7 +215,6 @@ function m.stepOver(arg)
         allThreadsContinued = false
     })
     event.emit('continued', arg.threadId)
-    message.output("stdout", "stepOver")
 end
 
 function m.stepInto(arg)

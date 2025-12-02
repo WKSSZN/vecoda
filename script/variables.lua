@@ -168,7 +168,6 @@ function m.variables(req)
     if not variable.value then
         if not vm.stopped(variable.vm) then return end
         event.emit("expand", req.seq, variable.scope or 0, variable.vm, variable.stackLevel, variable.reference or 0)
-        message.output("stdout", "expand table")
     else
         message.success(req, {variables = variable.value})
     end
@@ -189,7 +188,6 @@ function m.scopes(frameId)
             expensive = false,
         }
     end
-    message.output("stdout", "scopes")
     return result
 end
 
