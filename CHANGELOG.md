@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.4
+fix bug cannot look variables
+修复无法查看变量的bug
 ## 3.1.3
 delete debug log    
 去掉调试日志
