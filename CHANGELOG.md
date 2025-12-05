@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.5
+fix bug cannot work when extension dir has unicode character    
+修复扩展路径上有unicode字符时无法启动的问题
 ## 3.1.4
 fix bug cannot look variables
 修复无法查看变量的bug

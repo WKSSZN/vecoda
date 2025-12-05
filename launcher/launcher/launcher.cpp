@@ -29,6 +29,14 @@ bool getExeInfo(const char* fileName, ExeInfo& info)
 	return true;
 }
 
+const char* w2c(const wchar_t* src) {
+	static char utf8Str[500];
+	int utf8Size = WideCharToMultiByte(CP_UTF8, 0, src, -1, NULL, 0, NULL, NULL);
+	if (utf8Size == 0) return "";
+	WideCharToMultiByte(CP_UTF8, 0, src, -1, utf8Str, utf8Size, NULL, NULL);
+	return utf8Str;
+}
+
 void setBreakPoint(HANDLE hProcess, LPVOID entryPoint, bool set, BYTE* data) {
 	DWORD protection;
 	if (VirtualProtectEx(hProcess, entryPoint, 1, PAGE_EXECUTE_READWRITE, &protection)) {
@@ -50,34 +58,34 @@ void setBreakPoint(HANDLE hProcess, LPVOID entryPoint, bool set, BYTE* data) {
 	}
 }
 
-bool getStartUpDirectory(char* path, int maxPathLength) {
-	if (!GetModuleFileNameA(NULL, path, maxPathLength)) return false;
-	char* lastSlash = strrchr(path, '\\');
+bool getStartUpDirectory(wchar_t* path, int maxPathLength) {
+	if (!GetModuleFileNameW(NULL, path, maxPathLength)) return false;
+	wchar_t* lastSlash = wcsrchr(path, L'\\');
 	if (lastSlash == NULL) return false;
 	lastSlash[1] = 0;
 	return true;
 }
 
-std::string injectDll(DWORD processId, const char* dllFileName) {
+std::string injectDll(DWORD processId, const wchar_t* dllFileName) {
 
 	std::string message("");
 	bool success = true;
-	char fullFileName[260];
+	wchar_t fullFileName[260];
 	if (!getStartUpDirectory(fullFileName, 260)) return "get start up failed";
-	strcat(fullFileName, dllFileName);
+	wcscat(fullFileName, dllFileName);
 
 	HANDLE process = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processId);
 	if (process == NULL) return "open process failed";
 
 	HMODULE kernelModule = GetModuleHandleA("Kernel32");
-	FARPROC loadLibraryProc = GetProcAddress(kernelModule, "LoadLibraryA");
+	FARPROC loadLibraryProc = GetProcAddress(kernelModule, "LoadLibraryW");
 
 	DWORD exitCode = 0;
-	size_t length = strlen(fullFileName) + 1;
+	size_t length = wcslen(fullFileName) + 1;
 	void* remoteString = VirtualAllocEx(process, NULL, length, MEM_COMMIT, PAGE_READWRITE);
 	SIZE_T numBytesWritten;
-	WriteProcessMemory(process, remoteString, fullFileName, length, &numBytesWritten);
-	char* remoteFileName = static_cast<char*>(remoteString);
+	WriteProcessMemory(process, remoteString, fullFileName, length * sizeof(wchar_t), &numBytesWritten);
+	void* remoteFileName = static_cast<void*>(remoteString);
 	
 	DWORD threadId;
 	HANDLE thread = CreateRemoteThread(process, NULL, 0, (LPTHREAD_START_ROUTINE)loadLibraryProc, remoteFileName, 0, &threadId);
@@ -93,7 +101,7 @@ std::string injectDll(DWORD processId, const char* dllFileName) {
 
 	if (exitCode == 0) {
 		success = false;
-		message = std::string("inject dll failed, dll path:") +fullFileName;
+		message = std::string("inject dll failed, dll path:") + w2c(fullFileName);
 	}
 
 	if (remoteFileName != NULL) {
@@ -254,7 +262,7 @@ int launchProcess(lua_State* L) {
 
 	// inject dll
 	std::string message;
-	if ((message = injectDll(processInfo.dwProcessId, "LuaInject.dll")).size() != 0) {
+	if ((message = injectDll(processInfo.dwProcessId, L"LuaInject.dll")).size() != 0) {
 		delete eventChannel;
 		delete commandChannel;
 		return luaL_error(L, "Error: LuaInject.dll could not be loaded into the process:%s", message.c_str());
@@ -332,7 +340,7 @@ int attachProcess(lua_State* L)
 			delete commandChannel;
 			return luaL_error(L, "create command channel failed");
 		}
-		auto message = injectDll(p.p.processId, "LuaInject.dll");
+		auto message = injectDll(p.p.processId, L"LuaInject.dll");
 		if (message.size() != 0)
 		{
 			delete eventChannel;
