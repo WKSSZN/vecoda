@@ -228,30 +228,101 @@ local function tostring(root)
     end
 end
 
-function m.exec(bp, frameId)
-    if bp.condition then
-        local success, root = event.emit('evaluate', bp.condition, frameId)
-        if not success or not toboolean(root) then return false end
+local m_breakpointEvaluateId = 0
+local m_penddingRequests = {}
+
+local function getReqId()
+    m_breakpointEvaluateId = m_breakpointEvaluateId + 1
+    return m_breakpointEvaluateId << 16
+end
+
+local function evaluate(expression, threadId, stackLevel, callback)
+    local nReqId = getReqId()
+    event.emit("evaluate", nReqId, expression, threadId, stackLevel)
+    m_penddingRequests[nReqId] = callback
+end
+
+function m.bpEvaulateRet(seq, success, root)
+    if m_penddingRequests[seq] then
+        m_penddingRequests[seq](success and toboolean(root), success, root)
+        m_penddingRequests[seq] = nil
+        return true
     end
-    bp.hit = (bp.hit or 0) + 1
-    if bp.hitCondition then
-        local success, root = event.emit('evaluate', bp.hit .. " " .. bp.hitCondition, frameId)
-        if not success or not toboolean(root) then return false end
+end
+
+---@param str string
+local function processStatLogSequentially(bp, threadId, stackLevel, startPos, str, doneCallback)
+    local pattern = '{(%d+)}'
+    local s, e, key = str:find(pattern, startPos)
+    if not s then
+        doneCallback(str)
+        return
     end
-    if bp.statLog then
-        local res = bp.statLog[1]:gsub('{%d+}', function(key)
-            local stat = bp.statLog[key]
-            if not stat then return key end
-            local success, root = event.emit('evaluate', stat, frameId)
-            if not success then
-                return "{" .. stat .. "}"
-            end
-            return tostring(root)
+
+    local stat = bp.statLog[string.format("{%s}", key)]
+    if not stat then
+        processStatLogSequentially(bp, threadId, stackLevel, e + 1, str, doneCallback)
+        return
+    end
+
+    evaluate(stat, threadId, stackLevel, function (_, success, root)
+        local replacement
+        if success then
+            replacement = tostring(root)
+        else
+            replacement = "{" .. stat .. "}"
+        end
+
+        local newStr = str:sub(1, s - 1) .. replacement .. str:sub(e + 1)
+
+        local newStartPos = s + #replacement
+
+        processStatLogSequentially(bp, threadId, stackLevel, newStartPos, newStr, doneCallback)
+    end)
+end
+
+function m.exec(bp, frameId, callback)
+    local threadId, stackLevel = frameId >> 5, frameId & 0x1f
+    local function checkStatLog()
+        if not bp.statLog then
+            callback(true)
+            return
+        end
+        processStatLogSequentially(bp, threadId, stackLevel, 1, bp.statLog[1], function (result)
+            message.output('stdout', result)
+            callback(false)
         end)
-        message.output('stdout', res)
-        return false
     end
-    return true
+    local function checkHitCondition()
+        bp.hit = (bp.hit or 0) + 1
+        if not bp.hitCondition then
+            checkStatLog()
+            return
+        end
+
+        evaluate(bp.hit .. " " .. bp.hitCondition, threadId, stackLevel, function(hit)
+            if not hit then
+                callback(false)
+            else
+                checkStatLog()
+            end
+        end)
+    end
+    local function checkCondition()
+        if not bp.condition then
+            checkHitCondition()
+            return
+        end
+
+        evaluate(bp.condition, threadId, stackLevel, function (hit)
+            if not hit then
+                callback(false)
+            else
+                checkHitCondition()
+            end
+        end)
+    end
+    checkCondition()
 end
 
 return m

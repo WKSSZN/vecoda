@@ -97,17 +97,26 @@ local function handleBreak(nvm, bp, tryStop)
     if not bp and reason == 1 then
         bp = breakpoint.getBreakpoint(stacks[1].fileId, stacks[1].line)
     end
-    if numStackFrames ~= 0 and (not bp or breakpoint.exec(bp, stacks[1].id)) then
-        vm.setStacks(stacks)
-        message.event('stopped', {
-            reason = breakReasons[reason],
-            threadId = nvm,
-            hitBreakpointIds = bp and { bp.id } or nil,
-        })
-        event.emit('stopped')
+    local function breakOrContinue(bBreak)
+        if bBreak then
+            vm.setStacks(stacks)
+            message.event('stopped', {
+                reason = breakReasons[reason],
+                threadId = nvm,
+                hitBreakpointIds = bp and { bp.id } or nil,
+            })
+            event.emit('stopped')
+        else
+            debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
+            debugdata.CommandChannel:WriteUInt(nvm)
+        end
+    end
+    if numStackFrames == 0 then
+        breakOrContinue(false)
+    elseif not bp then
+        breakOrContinue(true)
     else
-        debugdata.CommandChannel:WriteUInt32(launcher.CommandId_Continue)
-        debugdata.CommandChannel:WriteUInt(nvm)
+        breakpoint.exec(bp, stacks[1].id, breakOrContinue)
     end
 end
 
@@ -176,7 +185,9 @@ function m.update(msg)
 
         local suc, root = parseEvaluateResult(success, result)
         if eventId == launcher.EventID_EvaluateRet then
-            event.emit("evaluateRet", seq, nvm, stackLevel, suc, root)
+            if not breakpoint.bpEvaulateRet(seq, success, root) then
+                event.emit("evaluateRet", seq, nvm, stackLevel, suc, root)
+            end
         else
             local reference = debugdata.EventChannel:ReadUInt32()
             event.emit("expandRet", seq, reference, nvm, stackLevel, suc, root)

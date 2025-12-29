@@ -1,4 +1,7 @@
 # Change Log
+## 3.1.6
+fix bug condition breakpoint dosn't work    
+修复条件断点无法使用的bug
 ## 3.1.5
 fix bug cannot work when extension dir has unicode character    
 修复扩展路径上有unicode字符时无法启动的问题
