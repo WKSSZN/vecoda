@@ -418,6 +418,7 @@ int GetEvent(unsigned long api, const lua_Debug* ar)
 {
     switch( g_interfaces[api].version)
     {
+        case 550: return ar->ld55.event;
         case 540: return ar->ld54.event;
         case 530:
         case 520: return ar->ld52.event;
@@ -432,6 +433,7 @@ int GetNups(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.nups;
         case 530:
         case 520: return ar->ld52.nups;
+        case 550: return ar->ld55.nups;
         default: return ar->ld51.nups;
     }
 }
@@ -443,6 +445,7 @@ int GetCurrentLine(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.currentline;
         case 530:
         case 520: return ar->ld52.currentline;
+        case 550: return ar->ld55.currentline;
         default: return ar->ld51.currentline;
     }
 }
@@ -454,6 +457,7 @@ int GetLineDefined(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.linedefined;
         case 530:
         case 520: return ar->ld52.linedefined;
+        case 550: return ar->ld55.linedefined;
         default: return ar->ld51.linedefined;
     }
 }
@@ -465,6 +469,7 @@ int GetLastLineDefined(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.lastlinedefined;
         case 530:
         case 520: return ar->ld52.lastlinedefined;
+        case 550: return ar->ld55.lastlinedefined;
         default: return ar->ld51.lastlinedefined;
     }
 }
@@ -476,6 +481,7 @@ const char* GetSource(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.source;
         case 530:
         case 520: return ar->ld52.source;
+        case 550: return ar->ld55.source;
         default: return ar->ld51.source;
     }
 }
@@ -487,6 +493,7 @@ const char* GetWhat(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.what;
         case 530:
         case 520: ar->ld52.what;
+        case 550: ar->ld55.what;
         default: return ar->ld51.what;
     }
 }
@@ -498,6 +505,7 @@ const char* GetName(unsigned long api, const lua_Debug* ar)
         case 540: return ar->ld54.name;
         case 530:
         case 520: return ar->ld52.name;
+        case 550: return ar->ld55.name;
         default: return ar->ld51.name;
     }
 }
@@ -1911,7 +1919,11 @@ bool LoadLuaFunctions(const std::unordered_map<std::string, DWORD64>& symbols, H
             // starting with Lua 5.2, there is no longer a LUA_GLOBALSINDEX pseudo-index. Instead the global table is stored in the registry at LUA_RIDX_GLOBALS
             luaInterface.globalsIndex   = 2;
             luaInterface.hookTailCall = LUA_HOOKTAILCALL; // Lua5.2 has LUA_HOOKTAILCALL, but no LUA_HOOKTAILRET
-            if (symbols.find("lua_newuserdatauv") != symbols.end())
+
+            if (symbols.find("luaL_makeseed") != symbols.end()) {
+                luaInterface.version = 550;
+                luaInterface.registryIndex = -(INT_MAX / 2 + 1000);
+            }else if (symbols.find("lua_newuserdatauv") != symbols.end())
             {
                 luaInterface.version = 540;
             }

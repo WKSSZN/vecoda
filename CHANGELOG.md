@@ -1,4 +1,7 @@
 # Change Log
+## 3.2.0
+support lua5.5        
+支持lua5.5
 ## 3.1.6
 fix bug condition breakpoint dosn't work    
 修复条件断点无法使用的bug

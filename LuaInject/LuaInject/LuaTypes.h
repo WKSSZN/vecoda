@@ -65,11 +65,34 @@ extern "C"
 		struct CallInfo* i_ci;
 	};
 
+	struct lua_Debug_55
+	{
+		int event;
+		const char* name;
+		const char* namewhat;
+		const char* what;
+		const char* source;
+		size_t srclen;
+		int currentline;
+		int linedefined;
+		int lastlinedefined;
+		unsigned char nups;
+		unsigned char nparams;
+		char isvararg;
+		unsigned char extraargs;
+		char istailcall;
+		int ftransfer;
+		int ntransfer;
+		char short_src[LUA_IDSIZE];
+		struct CallInfo* i_ci;
+	};
+
 	union lua_Debug
 	{
 		lua_Debug_51 ld51;
 		lua_Debug_52 ld52;
 		lua_Debug_54 ld54;
+		lua_Debug_55 ld55;
 	};
 
 	// =====================================================

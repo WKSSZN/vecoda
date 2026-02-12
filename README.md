@@ -1,9 +1,10 @@
 [中文README](./README_cn.md)
 # vecoda README
-Migrate decoda to vscode, and add some features. supports lua5.3, lua5.4 and x86/x64
+Migrate decoda to vscode, and add some features. supports lua5.3, lua5.4, lua5.5 and x86/x64
 
 ## Features
-supports lua5.1-lua5.4    
+True Agent-less, just need config launch.json, don't have to write any lua code    
+supports lua5.1-lua5.5    
 Launch  
 Attach  
 breakpoint&multi threa breakpoint  
