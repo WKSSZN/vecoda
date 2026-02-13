@@ -91,9 +91,13 @@ function handlers.attach(req)
             vm.newThread(nvm)
         end
         for _, script in ipairs(predata.scripts) do
-            if script.state == 0 then
-                files.addFile(script.name, script.source)
+            local source = script.source
+            if script.state == 1 then
+                source = "<unavailable>"
+            else
+                source = "<binary>"
             end
+            files.addFile(script.name, source)
         end
     end
 end
