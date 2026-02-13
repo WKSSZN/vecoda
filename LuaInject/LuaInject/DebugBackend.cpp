@@ -600,6 +600,7 @@ int DebugBackend::RegisterScript(lua_State* L, const char* source, size_t size, 
     }
 
     script->state = state;
+    script->name = fileName;
 
     m_eventChannel.WriteUInt32(EventId_LoadScript);
     m_eventChannel.WriteUInt(reinterpret_cast<size_t>(L));
