@@ -1,9 +1,9 @@
 # vecoda README
 
-把decode适配到vscode，并增加了一些功能，适配了lua5.3和lua5.4和64位程序
+把decode适配到vscode，并增加了一些功能，适配了lua5.3、lua5.4、lua5.5和64位程序
 
 ## Features
-支持lua5.1-lua5.4    
+支持lua5.1-lua5.5    
 Launch  
 Attach  
 断点&多线程断点  

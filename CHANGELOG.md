@@ -1,4 +1,7 @@
 # Change Log
+## 3.2.1
+fix error detect thread destroy    
+修复错误，监测lua_State销毁
 ## 3.2.0
 support lua5.5        
 支持lua5.5
