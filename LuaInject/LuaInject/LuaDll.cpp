@@ -1182,7 +1182,12 @@ int lua_loadbuffer_dll(unsigned long api, lua_State* L, const char* buffer, size
 
 void lua_call_dll(unsigned long api, lua_State* L, int nargs, int nresults)
 {
-    return g_interfaces[api].lua_call_dll_cdecl(L, nargs, nresults);
+    if (g_interfaces[api].lua_call_dll_cdecl != nullptr) {
+        return g_interfaces[api].lua_call_dll_cdecl(L, nargs, nresults);
+    }
+    else {
+        return g_interfaces[api].lua_callk_dll_cdecl(L, nargs, nresults, 0, nullptr);
+    }
 }
 
 int lua_pcallk_dll(unsigned long api, lua_State* L, int nargs, int nresults, int errfunc, int ctx, lua_CFunction k)
